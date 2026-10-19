@@ -20,8 +20,8 @@ android {
         applicationId = "com.choidev.choiterm"
         minSdk = 31
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.9.0"
+        versionCode = 13
+        versionName = "0.9.1"
         buildConfigField("String", "CHOITERM_HOME", "\"$choitermHome\"")
     }
 

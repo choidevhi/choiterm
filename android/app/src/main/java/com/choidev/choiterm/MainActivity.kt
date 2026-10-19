@@ -176,6 +176,7 @@ class MainActivity : Activity() {
         web.webViewClient = Client()
         web.webChromeClient = Chrome()
         web.addJavascriptInterface(Bridge(), "ChoiTermApp")
+        Updater.report = { event -> runOnUiThread { web.evaluateJavascript("window.choiterm && window.choiterm.update && window.choiterm.update($event)", null) } }
 
         // Edge to edge: pad by the system bars, and by the keyboard while it is up, so the page's
         // tabs stay below the status bar and its input bar sits just above the keyboard. A WebView
@@ -311,6 +312,10 @@ class MainActivity : Activity() {
         // The page checks it to tell an app that can switch PCs inside itself from an older one.
         @JavascriptInterface
         fun version(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+
+        // The newer APK from the PC, fetched and installed inside the app (see Updater).
+        @JavascriptInterface
+        fun installUpdate(url: String): String = Updater.start(this@MainActivity, url)
 
         @JavascriptInterface
         fun openUrl(url: String) {

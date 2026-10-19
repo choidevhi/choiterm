@@ -3922,7 +3922,22 @@ function showAppUpdate(reason, onClose = () => {}) {
   words.textContent = reason
   get.type = 'button'
   get.textContent = '새 앱 받기'
-  get.addEventListener('click', () => window.ChoiTermApp.openUrl(new URL('/ChoiTerm.apk', location.href).href))
+  get.addEventListener('click', () => {
+    const url = new URL('/ChoiTerm.apk', location.href).href
+
+    // Apps from 0.9.1 fetch and install it themselves; older ones hand it to the browser.
+    if (typeof window.ChoiTermApp.installUpdate !== 'function') {
+      window.ChoiTermApp.openUrl(url)
+
+      return
+    }
+
+    const answer = window.ChoiTermApp.installUpdate(url)
+
+    if (answer === 'permission') words.textContent = 'ChoiTerm의 "이 출처의 앱 허용"을 켜고 돌아와서 다시 눌러 주세요'
+    else if (answer === 'started' || answer === 'busy') showUpdateProgress({ state: 'progress', percent: 0 })
+    else words.textContent = '이 PC에서 받을 수 없어요'
+  })
   close.type = 'button'
   close.className = 'icon'
   close.innerHTML = UI.close
@@ -3936,6 +3951,39 @@ function showAppUpdate(reason, onClose = () => {}) {
 }
 
 if (oldApp()) showAppUpdate('새 앱이 있어요 (0.8.0) · 다른 PC 오가기와 새 화면이 앱 안에서 돼요')
+
+// The app's own download and install, reported by the app: a bar fills while the APK comes, then
+// Android's install screen takes over.
+function showUpdateProgress(event) {
+  const bar = document.getElementById('appUpdate')
+
+  if (bar === null) return
+
+  const words = bar.querySelector('span')
+  const get = bar.querySelector('button:not(.icon)')
+  let track = bar.querySelector('.app-update-track')
+
+  if (track === null) {
+    track = Object.assign(document.createElement('div'), { className: 'app-update-track' })
+    track.append(document.createElement('i'))
+    bar.append(track)
+  }
+
+  get.disabled = event.state === 'progress' || event.state === 'installing'
+  bar.dataset.state = event.state
+
+  if (event.state === 'progress') {
+    words.textContent = event.percent >= 0 ? `받는 중 ${event.percent}%` : '받는 중…'
+    track.firstChild.style.width = `${Math.max(0, event.percent)}%`
+  } else if (event.state === 'installing') {
+    words.textContent = '다 받았어요. 설치 화면에서 업데이트를 눌러 주세요'
+    track.firstChild.style.width = '100%'
+  } else if (event.state === 'error') {
+    words.textContent = `업데이트하지 못했어요: ${event.message}`
+    get.textContent = '다시 받기'
+    track.remove()
+  }
+}
 
 // 0.10.0 is newer than 0.9.2: compared part by part as numbers.
 function newerVersion(candidate, installed) {
@@ -7714,6 +7762,8 @@ function openFolderSheet(start, addProject = false) {
 
 window.choiterm = {
   back,
+  // The phone app's own update: download progress, then installing, done or an error.
+  update: showUpdateProgress,
   // For checks from outside (and the phone app): show a screen, start a new workspace.
   view: setView,
   create: openCreate,

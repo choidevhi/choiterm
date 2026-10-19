@@ -638,6 +638,10 @@ button:disabled { cursor: default; }
 .app-update span { flex: 1; }
 .app-update button:not(.icon) { padding: 7px 12px; border-radius: 9px; background: var(--bg); color: var(--strong); font-weight: 700; white-space: nowrap; }
 .app-update .icon { color: var(--bg); }
+.app-update button:disabled { opacity: 0.5; }
+.app-update-track { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 3px; overflow: hidden; border-radius: 2px; background: color-mix(in oklab, var(--bg) 25%, transparent); }
+.app-update-track i { display: block; width: 0; height: 100%; border-radius: 2px; background: var(--bg); transition: width 0.2s; }
+.app-update[data-state] { padding-bottom: 14px; }
 
 
 /* ---- Search (Ctrl+J): a box in the middle of the window. */
