@@ -16,6 +16,7 @@ import { findFileNames, githubTasks, gitDiff, gitStatus, searchFiles, type Chang
 import type { Meta } from './meta.ts'
 import { cleanBranch } from './repo.ts'
 import type { Project, Projects } from './projects.ts'
+import type { Github, GithubRepo, GithubState, SignIn } from './github.ts'
 import type { ServerMessage, SessionKind, Sessions, Viewer } from './sessions.ts'
 
 export interface Settings {
@@ -297,7 +298,10 @@ type JsonBody =
   | { folder: string; entries: Entry[] }
   | { projects: Project[] }
   | { files: string[] }
-  | { ok: boolean; project?: string }
+  | { ok: boolean; project?: string; error?: string }
+  | GithubState
+  | { repos: GithubRepo[] | null }
+  | { signIn: SignIn | null }
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -370,6 +374,8 @@ export interface Extras {
   createProject?: (name: string) => Promise<string | null>
   // Windows' folder picker on this PC's screen; null when cancelled.
   pickFolder?: (start: string) => Promise<string | null>
+  // GitHub through gh: signed in or not, the account's repositories, cloning one as a project.
+  github?: Github
   // Every project with its worktrees, adding a project, merging a branch, removing a worktree.
   projects?: Projects
   seenProjects?: () => string[]
@@ -975,8 +981,22 @@ export function startServer(
       return
     }
 
+    if (req.method === 'GET' && path === '/github' && extras.github !== undefined) {
+      void extras.github.state().then((state) => sendJson(res, 200, state))
+
+      return
+    }
+
+    if (req.method === 'GET' && path === '/github/repos' && extras.github !== undefined) {
+      const fresh = new URL(req.url ?? '/', 'http://local').searchParams.get('fresh') === '1'
+
+      void extras.github.repos(fresh).then((repos) => sendJson(res, repos === null ? 409 : 200, { repos }))
+
+      return
+    }
+
     // Changes to projects and worktrees: from this app's page only.
-    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove')) {
+    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove' || path === '/github/sign-in' || path === '/github/clone')) {
       if (!sameOrigin(req)) {
         sendJson(res, 403, { error: 'forbidden' })
         req.resume()
@@ -1002,6 +1022,13 @@ export function startServer(
           const project = await extras.createProject(raw.name)
 
           sendJson(res, project === null ? 400 : 200, project === null ? { ok: false } : { ok: true, project })
+        } else if (path === '/github/sign-in' && extras.github !== undefined) {
+          sendJson(res, 200, { signIn: await extras.github.signIn() })
+        } else if (path === '/github/clone' && typeof raw?.repo === 'string' && extras.github !== undefined && extras.projects !== undefined) {
+          const cloned = await extras.github.clone(raw.repo)
+          const project = cloned.ok ? await extras.projects.add(cloned.folder) : null
+
+          sendJson(res, project === null ? 409 : 200, project === null ? { ok: false, error: cloned.ok ? '프로젝트로 넣지 못했어요' : cloned.error } : { ok: true, project })
         } else if (path === '/projects' && typeof raw?.path === 'string' && isAbsolute(raw.path) && extras.projects !== undefined) {
           const project = await extras.projects.add(raw.path)
 

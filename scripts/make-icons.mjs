@@ -10,14 +10,14 @@ const lucide = join(root, 'node_modules', 'lucide-static', 'icons')
 const lobe = join(root, 'node_modules', '@lobehub', 'icons-static-svg', 'icons')
 
 const NAMES = [
-  'activity', 'archive', 'archive-restore', 'arrow-big-up', 'arrow-down', 'arrow-down-to-line', 'arrow-left', 'arrow-right', 'arrow-up',
+  'activity', 'archive', 'archive-restore', 'arrow-big-up', 'arrow-down', 'arrow-down-to-line', 'arrow-left', 'arrow-right', 'arrow-up', 'arrow-up-down',
   'bell', 'bell-off', 'bold', 'book-open', 'calendar-clock', 'case-sensitive', 'check', 'chevron-down', 'chevron-left', 'chevron-right',
   'chevron-up', 'chevrons-up-down', 'circle-check', 'circle-dashed', 'circle-dot', 'circle-help', 'circle-user', 'circle-x', 'clipboard-paste',
-  'code', 'columns-2', 'copy', 'corner-down-left', 'crosshair', 'delete', 'ellipsis', 'ellipsis-vertical', 'external-link', 'eye', 'file',
+  'code', 'columns-2', 'copy', 'corner-down-left', 'crosshair', 'delete', 'download', 'ellipsis', 'ellipsis-vertical', 'external-link', 'eye', 'file',
   'file-diff', 'file-plus', 'file-text', 'files', 'folder', 'folder-open', 'folder-plus', 'folder-tree', 'git-branch',
-  'git-compare-arrows', 'git-merge', 'git-pull-request', 'git-pull-request-closed', 'git-pull-request-draft', 'github', 'globe',
+  'git-compare-arrows', 'git-fork', 'git-merge', 'git-pull-request', 'git-pull-request-closed', 'git-pull-request-draft', 'github', 'globe', 'grip-vertical',
   'heading-1', 'heading-2', 'heading-3', 'history', 'house', 'image', 'images', 'italic', 'keyboard', 'layout-grid', 'list', 'list-checks',
-  'list-ordered', 'list-todo', 'loader-circle', 'message-circle-question', 'message-square-plus', 'monitor', 'moon', 'mouse-pointer-click',
+  'list-ordered', 'list-todo', 'loader-circle', 'lock', 'log-in', 'message-circle-question', 'message-square-plus', 'monitor', 'moon', 'mouse-pointer-click',
   'panel-left', 'panel-right', 'paperclip', 'pencil', 'pin', 'pin-off', 'play', 'plus', 'qr-code', 'quote', 'refresh-cw', 'rotate-ccw', 'save',
   'search', 'send', 'server', 'server-off', 'settings', 'settings-2', 'sliders-horizontal', 'smartphone', 'sparkles', 'square-check',
   'square-chevron-right', 'square-split-horizontal', 'square-terminal', 'sticky-note', 'strikethrough', 'tag', 'terminal', 'trash-2',

@@ -10,6 +10,7 @@ PC와 폰이 같은 터미널을 같이 보고 같이 입력하는 도구예요.
 - **PC와 폰이 같은 화면을 봐요.** PC는 사이드바·탭·상태 줄이 있는 창이고, 폰은 데스크톱 목록 → 작업 공간 목록 → 세션 화면이에요. 입력칸과 키 줄(Esc, Tab, 화살표, Ctrl 등)이 따로 있어요.
 - **에이전트:** Claude Code, Codex, Grok, Gemini, OpenCode, Cursor, GitHub Copilot, Qwen Code, PowerShell. PC에 설치된 것만 켜져요.
 - **워크트리 협업:** 새 작업 공간(Ctrl+N)이 `<프로젝트>.worktrees/<이름>` 폴더와 브랜치를 만들고, 그 안에서 에이전트를 켜요. 에이전트가 턴을 끝내면 그 워크트리 변경을 자동으로 커밋하고, 프로젝트 기본 폴더의 에이전트에게 알려요. 다른 워크트리 변경 가져오기, 병합, 하나로 합쳐 병합도 돼요.
+- **프로젝트:** 새로 만들기, 폴더 찾기, **GitHub에서 가져오기**(GitHub CLI로 로그인해 내 저장소를 찾고, 고르면 홈 폴더로 받아요). 순서는 이름순이고, 끌어서 바꿀 수 있어요.
 - **파일:** 파일 트리, 이름·내용 검색, 코드를 바로 고치고 자동 저장, git 변경과 diff(줄마다 주석을 달아 에이전트에게 보내기), GitHub PR·이슈(`gh`).
 - **미리보기:** 세션이 띄운 개발 서버를 버튼 하나로 열고, 폰에서도 Tailscale로 봐요. 화면 요소를 찍어 주석과 스크린샷을 에이전트에게 보내요.
 - **이미지:** 세션에서 주고받은 이미지를 모아 보고, 터미널의 이미지 경로에 마우스를 올리면 바로 미리 봐요.
@@ -21,6 +22,7 @@ PC와 폰이 같은 터미널을 같이 보고 같이 입력하는 도구예요.
 - Windows 10/11 PC
 - [Tailscale](https://tailscale.com): PC와 폰을 **같은 계정**으로 로그인. 페이지는 tailnet 안에서 그 계정에게만 열려요.
 - 쓰고 싶은 에이전트 CLI (예: [Claude Code](https://docs.claude.com/en/docs/claude-code), [Codex](https://github.com/openai/codex))
+- GitHub에서 가져오기를 쓰려면 [GitHub CLI](https://cli.github.com) (`winget install GitHub.cli`). 로그인은 ChoiTerm 화면에서 해요.
 - 안드로이드 폰 (iPhone은 브라우저로 `https://<PC>.<tailnet>.ts.net:8449`를 열면 돼요)
 
 ## 빠른 시작 (만들어진 파일로)

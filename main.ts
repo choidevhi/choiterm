@@ -15,6 +15,7 @@ import { codexUsage } from './usage.ts'
 import { createTurnWatch } from './turns.ts'
 import { addWorktree, createProject, createRepoLookup, listBranches, listWorktrees, mergeBranch, removeWorktree } from './repo.ts'
 import { pickFolder } from './folder-picker.ts'
+import { createGithub } from './github.ts'
 import { autoCommit, commitsAhead, createdNote, createRelay, mergeInto, mergeToProject, turnNote } from './teamwork.ts'
 import { createDrafts, retype } from './drafts.ts'
 import { createProjects } from './projects.ts'
@@ -432,6 +433,7 @@ const running = startServer(settings, sessions, files, log, {
     return folder === null ? null : projects.add(folder)
   },
   pickFolder: (start) => pickFolder(start || homedir(), 'ChoiTerm 폴더 선택'),
+  github: createGithub(homedir()),
   removeWorktree: async (project, path) => {
     const removed = await removeWorktree(project, path)
 

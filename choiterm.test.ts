@@ -20,6 +20,7 @@ import { pickerScript } from './folder-picker.ts'
 import { applyInput, createDrafts } from './drafts.ts'
 import { autoCommit, createdNote, createRelay, mergeToProject, turnNote } from './teamwork.ts'
 import { createProjects } from './projects.ts'
+import { cleanRepoName, createGithub, parseRepos, parseSignIn, type GhResult, type SignInProcess } from './github.ts'
 import { createTurnWatch } from './turns.ts'
 import { parseProcessTable, portsBySession } from './ports.ts'
 import { parseRolloutHead, pickRollout } from './codex.ts'
@@ -1515,4 +1516,103 @@ test('drafts are kept on disk and survive a restart; an ended session\'s goes', 
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('github: the device code and the repository list are read from gh', () => {
+  assert.deepEqual(parseSignIn('! First copy your one-time code: AB12-CD34\nOpen this URL to continue in your web browser: https://github.com/login/device\n'), { code: 'AB12-CD34', url: 'https://github.com/login/device' })
+  assert.deepEqual(parseSignIn('\n! One-time code (1E91-D12B) copied to clipboard\nOpen this URL to continue in your web browser: https://github.com/login/device\n'), { code: '1E91-D12B', url: 'https://github.com/login/device' })
+  assert.equal(parseSignIn('- Waiting for login...'), null)
+  assert.deepEqual(parseRepos('{"n":"me/app","d":null,"p":true,"t":"2026-10-01T00:00:00Z"}\nnot json\n{"n":"org/site","d":"web","p":false,"t":"2026-10-02T00:00:00Z"}\n'), [
+    { name: 'me/app', description: '', private: true, pushed: '2026-10-01T00:00:00Z' },
+    { name: 'org/site', description: 'web', private: false, pushed: '2026-10-02T00:00:00Z' },
+  ])
+  assert.equal(cleanRepoName('me/my.app-2'), 'me/my.app-2')
+  assert.equal(cleanRepoName('me/..'), null)
+  assert.equal(cleanRepoName('me/app; rm'), null)
+  assert.equal(cleanRepoName('../x'), null)
+})
+
+test('github: state, sign-in by code, cached repositories and cloning', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'choiterm-gh-'))
+  const calls: string[][] = []
+  let signedIn = false
+  let listed = 0
+  let clock = 0
+  const answer = (out: string, ok = true): GhResult => ({ ok, out, missing: false })
+
+  const run = (args: string[]): Promise<GhResult> => {
+    calls.push(args)
+
+    if (args[0] === 'api' && args[1] === 'user') return Promise.resolve(signedIn ? answer('me\n') : answer('', false))
+
+    if (args[0] === 'api') {
+      listed += 1
+
+      return Promise.resolve(answer('{"n":"me/old","d":"","p":false,"t":"2026-01-01T00:00:00Z"}\n{"n":"me/new","d":"","p":true,"t":"2026-09-01T00:00:00Z"}\n'))
+    }
+
+    if (args[0] === 'repo' && args[1] === 'clone') {
+      mkdirSync(args[3], { recursive: true })
+
+      return Promise.resolve(answer(''))
+    }
+
+    return Promise.resolve(answer(''))
+  }
+
+  let output: (text: string) => void = () => {}
+  let exit: (ok: boolean) => void = () => {}
+  const typed: string[] = []
+
+  const login: SignInProcess = {
+    onOutput: (listener) => { output = listener },
+    onExit: (listener) => { exit = listener },
+    write: (text) => typed.push(text),
+    stop: () => {},
+  }
+
+  try {
+    const github = createGithub(home, run, () => login, () => clock)
+
+    assert.deepEqual(await github.state(), { installed: true, login: null, signIn: null })
+    assert.equal(await github.repos(false), null)
+
+    const asked = github.signIn()
+
+    output('! First copy your one-time code: ')
+    output('WXYZ-1234\n')
+    assert.deepEqual(await asked, { code: 'WXYZ-1234', url: 'https://github.com/login/device' })
+    assert.deepEqual(typed, ['\n'])
+    // Asking again while it waits gives the same code, not a second gh.
+    assert.deepEqual(await github.signIn(), { code: 'WXYZ-1234', url: 'https://github.com/login/device' })
+    assert.deepEqual((await github.state()).signIn, { code: 'WXYZ-1234', url: 'https://github.com/login/device' })
+
+    signedIn = true
+    exit(true)
+    assert.ok(calls.some((args) => args.join(' ') === 'auth setup-git'))
+    assert.deepEqual(await github.state(), { installed: true, login: 'me', signIn: null })
+
+    assert.deepEqual((await github.repos(false))?.map((repo) => repo.name), ['me/new', 'me/old'])
+    await github.repos(false)
+    assert.equal(listed, 1)
+    clock += 61_000
+    await github.repos(false)
+    assert.equal(listed, 2)
+    await github.repos(true)
+    assert.equal(listed, 3)
+
+    assert.deepEqual(await github.clone('me/new'), { ok: true, folder: join(home, 'new') })
+    assert.deepEqual(calls.at(-1), ['repo', 'clone', 'me/new', join(home, 'new')])
+    assert.deepEqual(await github.clone('me/new'), { ok: false, error: `${join(home, 'new')} 폴더가 이미 있어요` })
+    assert.deepEqual(await github.clone('me/../x'), { ok: false, error: '저장소 이름이 이상해요' })
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('github: no gh on this PC', async () => {
+  const github = createGithub(tmpdir(), () => Promise.resolve({ ok: false, out: '', missing: true }), () => null)
+
+  assert.deepEqual(await github.state(), { installed: false, login: null, signIn: null })
+  assert.equal(await github.signIn(), null)
 })

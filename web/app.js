@@ -926,8 +926,18 @@ addButton.addEventListener('click', (event) => {
   else closeAddMenu()
 })
 
+// A menu closes on a press anywhere outside it and its own button. A click is not enough: dragging
+// or holding on the terminal never makes one.
+function closeOnPressOutside(popup, close, button) {
+  document.addEventListener('pointerdown', (event) => {
+    if (popup.hidden || popup.contains(event.target) || button.contains(event.target)) return
+
+    close()
+  }, { capture: true })
+}
+
 menu.addEventListener('click', (event) => event.stopPropagation())
-document.addEventListener('click', closeAddMenu)
+closeOnPressOutside(menu, closeAddMenu, addButton)
 void refreshAgents().then(render)
 
 for (const button of document.querySelectorAll('[data-kind]')) {
@@ -3945,7 +3955,7 @@ pcFilter.addEventListener('keydown', (event) => {
 
   if (event.key === 'Enter') pcList.querySelector('.pc-row:not(:disabled):not([data-here])')?.click()
 })
-document.addEventListener('click', closePcMenu)
+closeOnPressOutside(pcMenu, closePcMenu, pcButton)
 
 void refreshMachines()
 
@@ -4507,16 +4517,12 @@ function projectHead(project, count) {
 }
 
 function openProjectMenu(project, at) {
-  const key = keyOf(project.path ?? project.name)
   const entries = [
     ['새 작업 공간', 'plus', () => openCreate(project.path)],
     ['새 에이전트', 'square-terminal', () => openAddMenuAt(document.body, project.path)],
     ['폴더 경로 복사', 'copy', () => void copyText(project.path ?? '')],
-    ['위로 옮기기', 'arrow-up', () => stepProject(key, -1)],
-    ['아래로 옮기기', 'arrow-down', () => stepProject(key, 1)],
+    ['순서 바꾸기', 'arrow-up-down', openProjectOrder],
   ]
-
-  if (projectOrder.length > 0) entries.push(['프로젝트 이름순으로 되돌리기', 'case-sensitive', () => saveProjectOrder([])])
 
   showActions(project.name, entries, at)
 }
@@ -4610,17 +4616,84 @@ function moveProject(key, target, after) {
   saveProjectOrder(keys)
 }
 
-// Up or down one place (the phone, where there is no dragging).
-function stepProject(key, by) {
-  const keys = [...list.querySelectorAll('.proj-head')].map((head) => head.dataset.key)
-  const at = keys.indexOf(key)
-  const to = at + by
+// The order sheet: every project on one row with a grip; dragging the grip moves the row at once,
+// with a finger or the mouse, and the order is kept as soon as it is let go.
+function openProjectOrder() {
+  const rows = document.createElement('div')
 
-  if (at < 0 || to < 0 || to >= keys.length) return
+  for (const project of orderProjects(buildTree().projects)) {
+    const row = document.createElement('div')
+    const grip = document.createElement('span')
+    const name = document.createElement('span')
 
-  keys.splice(at, 1)
-  keys.splice(to, 0, key)
-  saveProjectOrder(keys)
+    row.className = 'order-row'
+    row.dataset.key = projectKey(project)
+    grip.className = 'order-grip'
+    grip.innerHTML = icon('grip-vertical', 16)
+    name.className = 'order-name'
+    name.textContent = project.name
+    row.append(grip, name)
+    dragToReorder(row, rows)
+    rows.append(row)
+  }
+
+  const reset = document.createElement('button')
+
+  rows.className = 'order-list'
+  reset.type = 'button'
+  reset.className = 'order-reset'
+  reset.innerHTML = `${icon('case-sensitive', 14)}<span>이름순으로 되돌리기</span>`
+  reset.hidden = projectOrder.length === 0
+  reset.addEventListener('click', () => {
+    saveProjectOrder([])
+    openProjectOrder()
+  })
+  sheetTitle.textContent = '프로젝트 순서'
+  sheetBody.replaceChildren(rows, reset)
+  sheet.hidden = false
+}
+
+// A row follows the pointer from anywhere on it (the whole row is the handle, so a thumb need not
+// hit the grip) and swaps places with a neighbour once it passes that neighbour's middle.
+function dragToReorder(row, rows) {
+  row.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return
+
+    event.preventDefault()
+    row.setPointerCapture(event.pointerId)
+
+    // Where on the row it was held, and how far it is drawn from its place in the list.
+    const grab = event.clientY - row.getBoundingClientRect().top
+    let offset = 0
+
+    row.dataset.dragging = ''
+
+    const move = (moved) => {
+      const before = row.previousElementSibling
+      const after = row.nextElementSibling
+
+      if (before !== null && moved.clientY < before.getBoundingClientRect().top + before.offsetHeight / 2) rows.insertBefore(row, before)
+      else if (after !== null && moved.clientY > after.getBoundingClientRect().top + after.offsetHeight / 2) rows.insertBefore(after, row)
+
+      const place = row.getBoundingClientRect().top - offset
+
+      offset = moved.clientY - grab - place
+      row.style.transform = `translateY(${offset}px)`
+    }
+
+    const end = () => {
+      row.removeEventListener('pointermove', move)
+      row.removeEventListener('pointerup', end)
+      row.removeEventListener('pointercancel', end)
+      row.style.transform = ''
+      delete row.dataset.dragging
+      saveProjectOrder([...rows.children].map((each) => each.dataset.key))
+    }
+
+    row.addEventListener('pointermove', move)
+    row.addEventListener('pointerup', end)
+    row.addEventListener('pointercancel', end)
+  })
 }
 
 // ---- Adding a project: a new one in the home folder, or an existing folder picked with Windows'
@@ -4751,7 +4824,224 @@ function openProjectAdd(at) {
   showActions('프로젝트 추가', [
     ['새 프로젝트 만들기', 'folder-plus', () => void createProjectPrompt()],
     [ON_THIS_PC ? '폴더 찾기… (탐색기)' : '폴더 찾기…', 'folder-open', () => void findProjectFolder()],
+    ['GitHub에서 가져오기…', 'github', openGithubClone],
   ], at)
+}
+
+// ---- GitHub: sign in with gh's device code, then pick one of the account's repositories; the PC
+// clones it into the home folder and it becomes a project.
+const GITHUB_POLL_MS = 3000
+
+function openGithubClone() {
+  const dialog = document.createElement('div')
+  const head = document.createElement('div')
+  const who = document.createElement('span')
+  const body = document.createElement('div')
+  let repos = []
+  let words = ''
+
+  const open = () => dialog.isConnected && !composer.hidden
+  const getJson = (path) => fetch(path, { cache: 'no-store' }).then((response) => response.json()).catch(() => null)
+  const say = (text) => body.replaceChildren(Object.assign(document.createElement('div'), { className: 'gh-note', textContent: text }))
+
+  const showMissing = () => {
+    const command = 'winget install GitHub.cli'
+    const line = document.createElement('div')
+    const copy = document.createElement('button')
+
+    say('이 PC에 GitHub CLI(gh)가 없어요. PC에서 아래 명령으로 설치한 뒤 다시 열어 주세요.')
+    line.className = 'gh-command'
+    line.append(Object.assign(document.createElement('code'), { textContent: command }))
+    copy.type = 'button'
+    copy.className = 'icon-5'
+    copy.innerHTML = icon('copy', 14)
+    copy.setAttribute('aria-label', '명령 복사')
+    copy.addEventListener('click', () => void copyText(command))
+    line.append(copy)
+    body.append(line)
+  }
+
+  const showSignIn = () => {
+    const start = document.createElement('button')
+
+    say('GitHub 계정으로 로그인하면 내 저장소를 골라서 이 PC로 받을 수 있어요.')
+    start.type = 'button'
+    start.className = 'cmp-submit gh-start'
+    start.innerHTML = `${icon('log-in', 14)}<span>GitHub 로그인</span>`
+    start.addEventListener('click', async () => {
+      start.disabled = true
+
+      const reply = await postJson('/github/sign-in', {}).then((response) => response.json()).catch(() => null)
+
+      if (reply?.signIn) showCode(reply.signIn)
+      else {
+        start.disabled = false
+        notice('로그인을 시작하지 못했어요')
+      }
+    })
+    body.append(start)
+  }
+
+  // The code to type at github.com/login/device; this screen waits for gh to finish.
+  const showCode = (signIn) => {
+    const code = document.createElement('button')
+    const go = document.createElement('button')
+
+    say('아래 코드를 복사하고, GitHub 페이지에서 붙여 넣은 뒤 승인해 주세요.')
+    code.type = 'button'
+    code.className = 'gh-code'
+    code.textContent = signIn.code
+    code.title = '복사'
+    code.addEventListener('click', () => void copyText(signIn.code))
+    go.type = 'button'
+    go.className = 'cmp-submit gh-start'
+    go.innerHTML = `${icon('external-link', 14)}<span>복사하고 GitHub 열기</span>`
+    go.addEventListener('click', () => {
+      void copyText(signIn.code)
+      openUrl(signIn.url)
+    })
+    body.append(code, go, Object.assign(document.createElement('div'), { className: 'gh-wait', innerHTML: `${icon('loader-circle', 14)}<span>승인을 기다리는 중…</span>` }))
+
+    const poll = async () => {
+      if (!open()) return
+
+      const state = await getJson('/github')
+
+      if (state?.login) void load(false)
+      else setTimeout(poll, GITHUB_POLL_MS)
+    }
+
+    setTimeout(poll, GITHUB_POLL_MS)
+  }
+
+  const drawRepos = () => {
+    const shown = repos.filter((repo) => words === '' || `${repo.name} ${repo.description}`.toLowerCase().includes(words))
+    const rows = body.querySelector('.gh-list')
+
+    rows.replaceChildren()
+
+    for (const repo of shown.slice(0, 200)) {
+      const row = document.createElement('button')
+      const top = document.createElement('span')
+      const name = document.createElement('span')
+      const when = document.createElement('span')
+
+      row.type = 'button'
+      row.className = 'gh-row'
+      top.className = 'gh-row-top'
+      name.className = 'gh-name'
+      name.textContent = repo.name
+      top.append(name)
+
+      if (repo.private) top.insertAdjacentHTML('beforeend', `<span class="gh-lock" title="비공개">${icon('lock', 12)}</span>`)
+
+      when.className = 'gh-when'
+      when.textContent = repo.pushed === '' ? '' : since(Date.parse(repo.pushed))
+      top.append(when)
+      row.append(top)
+
+      if (repo.description !== '') row.append(Object.assign(document.createElement('span'), { className: 'gh-desc', textContent: repo.description }))
+
+      row.addEventListener('click', () => void clone(repo, row))
+      rows.append(row)
+    }
+
+    if (shown.length === 0) rows.append(Object.assign(document.createElement('div'), { className: 'gh-note', textContent: repos.length === 0 ? '저장소가 없어요' : '맞는 저장소가 없어요' }))
+  }
+
+  const clone = async (repo, row) => {
+    for (const each of body.querySelectorAll('.gh-row')) each.disabled = true
+
+    row.dataset.busy = ''
+    row.querySelector('.gh-when').innerHTML = `${icon('loader-circle', 13)}받는 중…`
+
+    const reply = await postJson('/github/clone', { repo: repo.name }).then((response) => response.json()).catch(() => null)
+
+    if (reply?.ok) {
+      notice(`프로젝트를 추가했어요: ${baseName(reply.project)}`)
+      closeCreate()
+      void refreshProjects()
+
+      return
+    }
+
+    notice(reply?.error ?? '받지 못했어요')
+    drawRepos()
+  }
+
+  const load = async (fresh) => {
+    say('확인하는 중…')
+
+    const state = await getJson('/github')
+
+    if (!open()) return
+
+    if (state === null) {
+      say('PC에 물어보지 못했어요')
+
+      return
+    }
+
+    if (!state.installed) return showMissing()
+
+    if (state.signIn) return showCode(state.signIn)
+
+    if (!state.login) return showSignIn()
+
+    who.textContent = state.login
+    say('저장소를 불러오는 중…')
+
+    const listed = await getJson(`/github/repos${fresh ? '?fresh=1' : ''}`)
+
+    if (!open()) return
+
+    repos = listed?.repos ?? []
+
+    const field = document.createElement('input')
+    const rows = document.createElement('div')
+
+    field.className = 'cmp-input-plain'
+    field.type = 'search'
+    field.placeholder = `저장소 ${repos.length}개에서 찾기…`
+    field.value = words
+    field.addEventListener('input', () => {
+      words = field.value.trim().toLowerCase()
+      drawRepos()
+    })
+    rows.className = 'gh-list'
+    body.replaceChildren(field, rows)
+    drawRepos()
+
+    if (!touch) field.focus()
+  }
+
+  const refresh = document.createElement('button')
+  const close = document.createElement('button')
+
+  dialog.className = touch ? 'drawer composer gh' : 'dialog composer gh'
+  head.className = 'dialog-head'
+  head.innerHTML = '<strong>GitHub에서 가져오기</strong>'
+  who.className = 'gh-who'
+  refresh.type = 'button'
+  refresh.className = 'icon-5'
+  refresh.innerHTML = icon('refresh-cw', 14)
+  refresh.setAttribute('aria-label', '새로 고침')
+  refresh.addEventListener('click', () => void load(true))
+  close.type = 'button'
+  close.className = 'icon-5'
+  close.innerHTML = icon('x', 15)
+  close.setAttribute('aria-label', '닫기')
+  close.addEventListener('click', closeCreate)
+  head.append(who, refresh, close)
+  body.className = 'cmp-body gh-body'
+
+  // The phone's grab handle sits above the title row, not in it.
+  if (touch) dialog.append(Object.assign(document.createElement('div'), { className: 'sheet-handle' }))
+
+  dialog.append(head, body)
+  composer.replaceChildren(dialog)
+  composer.hidden = false
+  void load(false)
 }
 
 // ---- Workspace options (the sliders button on the PC, the "Workspace options" chip on the phone).
