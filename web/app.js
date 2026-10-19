@@ -1631,6 +1631,12 @@ $('sheetClose').addEventListener('click', () => {
   sheet.hidden = true
 })
 
+// A tap on the dimmed space around a sheet puts it away too (on the click, so the tap does not
+// fall through to what is under it).
+sheet.addEventListener('click', (event) => {
+  if (event.target === sheet) sheet.hidden = true
+})
+
 renderKeys()
 
 // The input bar types into the terminal as you write, so Claude's own completions and the command
@@ -3705,7 +3711,7 @@ function renderHosts() {
     main.className = 'host-main'
     main.append(Object.assign(document.createElement('span'), { className: 'resume-title', textContent: plainName(resume) }))
     where.className = 'resume-sub'
-    where.innerHTML = `<i style="background:${repoColour(repo?.name ?? here?.name ?? 'ChoiTerm')}"></i>`
+    where.innerHTML = `<i style="background:${colourOf(repo?.project ?? null, repo?.name ?? here?.name ?? 'ChoiTerm')}"></i>`
     where.append(repo ? `${repo.name}  ·  ${repo.branch}` : resume.cwd ?? '')
     main.append(where)
     card.append(tile, main)
@@ -3727,7 +3733,19 @@ function renderHosts() {
   folder.className = 'quick-action'
   folder.innerHTML = `<span class="quick-tile">${icon('folder-open', 16)}</span>폴더에서 열기`
   folder.addEventListener('click', () => void openFolderAnywhere())
-  quick.append(create, folder)
+
+  // Adding a project of this PC: its git projects to pick from, a new one, or GitHub.
+  const project = document.createElement('button')
+
+  project.type = 'button'
+  project.className = 'quick-action'
+  project.innerHTML = `<span class="quick-tile">${icon('folder-plus', 16)}</span>프로젝트 추가`
+  project.addEventListener('click', () => {
+    const box = project.getBoundingClientRect()
+
+    openProjectAdd({ mouse: !touch, x: box.left, y: box.bottom + 4 })
+  })
+  quick.append(create, folder, project)
   parts.push(heading('빠른 작업'), quick)
 
   // On the PC: what the phone app needs, this PC's tailnet address and the app itself.
@@ -4195,7 +4213,8 @@ const prs = new Map()
 const sideFilter = $('sideFilter')
 let projectList = []
 let listFilter = ['all', 'busy', 'new'].includes(load(FILTER_KEY)) ? load(FILTER_KEY) : 'all'
-let listSort = load(SORT_KEY) === 'name' ? 'name' : 'recent'
+// By name unless the owner picked recent activity.
+let listSort = load(SORT_KEY) === 'recent' ? 'recent' : 'name'
 let listGroup = load(GROUP_KEY) === 'none' ? 'none' : 'project'
 // Every agent listed (the owner's choice), or a one-line summary when a workspace has several.
 let agentsView = load(AGENTS_VIEW_KEY) === 'compact' ? 'compact' : 'full'
@@ -4326,6 +4345,83 @@ function repoColour(name) {
   return REPO_COLOURS[Math.abs(hash) % REPO_COLOURS.length]
 }
 
+// ---- A project folder's colour: the owner's pick (kept on this device), else one from its name.
+const COLOURS_KEY = 'choiterm.project-colours'
+const PICKABLE_COLOURS = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#78716c']
+
+function readColours(text) {
+  const colours = new Map()
+
+  try {
+    for (const [key, colour] of Object.entries(JSON.parse(text ?? '{}') ?? {})) {
+      if (typeof colour === 'string' && /^#[0-9a-f]{6}$/i.test(colour)) colours.set(key, colour)
+    }
+  } catch {
+    // Unreadable: every project goes back to its own colour.
+  }
+
+  return colours
+}
+
+const projectColours = readColours(load(COLOURS_KEY))
+
+function colourOf(path, name) {
+  return projectColours.get(keyOf(path ?? name)) ?? repoColour(name)
+}
+
+function setProjectColour(key, colour) {
+  if (colour === null) projectColours.delete(key)
+  else projectColours.set(key, colour)
+
+  save(COLOURS_KEY, projectColours.size === 0 ? null : JSON.stringify(Object.fromEntries(projectColours)))
+  renderDrawer()
+}
+
+// The swatches: a menu at the pointer on the PC, a sheet on the phone.
+function openProjectColour(project, at) {
+  const key = keyOf(project.path ?? project.name)
+  const chosen = projectColours.get(key) ?? null
+  const grid = document.createElement('div')
+
+  const close = () => {
+    closeContextMenu()
+    sheet.hidden = true
+  }
+
+  grid.className = 'swatches'
+
+  for (const colour of PICKABLE_COLOURS) {
+    const swatch = document.createElement('button')
+
+    swatch.type = 'button'
+    swatch.className = 'swatch'
+    swatch.style.background = colour
+    swatch.toggleAttribute('data-chosen', colour === chosen)
+    swatch.setAttribute('aria-label', colour)
+    swatch.addEventListener('click', () => {
+      close()
+      setProjectColour(key, colour)
+    })
+    grid.append(swatch)
+  }
+
+  const reset = menuEntry('기본 색으로', () => {
+    close()
+    setProjectColour(key, null)
+  }, { 'data-chosen': chosen === null }, 'rotate-ccw')
+
+  if (at.mouse) {
+    contextMenu.replaceChildren(Object.assign(document.createElement('div'), { className: 'menu-label', textContent: '폴더 색' }), grid, reset)
+    placeContextMenu(at.x, at.y)
+
+    return
+  }
+
+  sheetTitle.textContent = `${project.name} 폴더 색`
+  sheetBody.replaceChildren(grid, reset)
+  sheet.hidden = false
+}
+
 function openTree(tree) {
   const session = latestSession(tree)
 
@@ -4442,6 +4538,22 @@ function worktreeRow(tree) {
 
   if (pins.has(key)) title.insertAdjacentHTML('beforeend', `<span class="pin-mark" title="고정">${icon('pin', 11)}</span>`)
 
+  // Another agent in this same workspace (the main checkout included), next to the ones it has.
+  if (tree.path) {
+    const add = document.createElement('button')
+
+    add.type = 'button'
+    add.className = 'icon-5 card-add'
+    add.innerHTML = icon('plus', 13)
+    add.title = '이 작업 공간에 새 에이전트'
+    add.setAttribute('aria-label', '이 작업 공간에 새 에이전트')
+    add.addEventListener('click', (event) => {
+      event.stopPropagation()
+      openAddMenuAt(add, tree.path)
+    })
+    title.append(add)
+  }
+
   // The branch line; a folder workspace shows its folder instead.
   meta.className = 'card-meta'
   branch.className = tree.project.git ? 'card-branch' : 'card-branch mono'
@@ -4452,7 +4564,7 @@ function worktreeRow(tree) {
     const repo = document.createElement('span')
 
     repo.className = 'card-repo'
-    repo.innerHTML = `<i style="background:${repoColour(tree.project.name)}"></i>`
+    repo.innerHTML = `<i style="background:${colourOf(tree.project.path, tree.project.name)}"></i>`
     repo.append(tree.project.name)
     meta.append(repo)
   }
@@ -4572,7 +4684,10 @@ function projectHead(project, count) {
   mark.className = 'proj-mark'
   mark.innerHTML = icon(project.git ? 'folder' : 'folder-open', 14)
 
-  if (project.git) mark.style.color = repoColour(project.name)
+  // The PC keeps folder marks grey, except a colour the owner picked.
+  if (project.git || projectColours.has(key)) mark.style.color = colourOf(project.path, project.name)
+
+  mark.toggleAttribute('data-own-colour', projectColours.has(key))
 
   name.className = 'proj-name'
   name.textContent = project.name
@@ -4618,6 +4733,7 @@ function openProjectMenu(project, at) {
     ['새 에이전트', 'square-terminal', () => openAddMenuAt(document.body, project.path)],
     ['폴더 경로 복사', 'copy', () => void copyText(project.path ?? '')],
     ['순서 바꾸기', 'arrow-up-down', openProjectOrder],
+    ['폴더 색 바꾸기', 'palette', () => openProjectColour(project, at)],
   ]
 
   showActions(project.name, entries, at)
@@ -4806,7 +4922,7 @@ async function pickFolderOnPc() {
 
 async function findProjectFolder() {
   if (!ON_THIS_PC) {
-    openFolderSheet(null, true)
+    void openProjectFinder()
 
     return
   }
@@ -4814,6 +4930,67 @@ async function findProjectFolder() {
   const folder = await pickFolderOnPc()
 
   if (folder !== null) await addProjectFolder(folder)
+}
+
+// From a phone (or another PC), where Windows' dialog cannot open: the git projects already on this
+// PC to pick from with a search, and the usual folders to walk from.
+async function openProjectFinder() {
+  const field = document.createElement('input')
+  const rows = document.createElement('div')
+  const places = document.createElement('div')
+  const found = await fetch('/projects/suggest', { cache: 'no-store' }).then((response) => response.json()).catch(() => null)
+  const repos = Array.isArray(found?.repos) ? found.repos : []
+  const known = new Set(knownProjects().map((each) => keyOf(each.project)))
+
+  const draw = () => {
+    const words = field.value.trim().toLowerCase()
+
+    rows.replaceChildren()
+
+    for (const path of repos) {
+      if (words !== '' && !path.toLowerCase().includes(words)) continue
+
+      const row = document.createElement('button')
+      const added = known.has(keyOf(path))
+
+      const text = document.createElement('span')
+      // Shown from the home folder: C:\Users\me\Desktop\app reads ~\Desktop\app.
+      const shown = typeof found?.home === 'string' && keyOf(path).startsWith(`${keyOf(found.home)}\\`) ? `~${path.slice(found.home.length)}` : path
+
+      row.type = 'button'
+      row.className = 'sheet-row finder-row'
+      row.innerHTML = icon('folder', 16)
+      text.className = 'finder-text'
+      text.append(Object.assign(document.createElement('span'), { className: 'finder-name', textContent: baseName(path) }))
+      text.append(Object.assign(document.createElement('small'), { className: 'finder-path', textContent: shown }))
+      row.append(text)
+
+      if (added) row.append(Object.assign(document.createElement('span'), { className: 'badge-primary', textContent: '추가됨' }))
+
+      row.addEventListener('click', () => {
+        sheet.hidden = true
+        void addProjectFolder(path)
+      })
+      rows.append(row)
+    }
+
+    if (rows.childElementCount === 0) rows.append(note(repos.length === 0 ? '찾은 git 프로젝트가 없어요' : '맞는 프로젝트가 없어요'))
+  }
+
+  field.className = 'cmp-input-plain'
+  field.type = 'search'
+  field.placeholder = `프로젝트 ${repos.length}개에서 찾기…`
+  field.addEventListener('input', draw)
+  rows.className = 'sheet-list finder-list'
+  places.className = 'chips'
+
+  for (const place of found?.places ?? []) places.append(chip(place.name, () => openFolderSheet(place.path, true)))
+
+  places.append(chip('드라이브', () => openFolderSheet(null, true)))
+  sheetTitle.textContent = '프로젝트 찾기'
+  sheetBody.replaceChildren(field, rows, Object.assign(document.createElement('h3'), { textContent: '폴더에서 직접 고르기' }), places)
+  sheet.hidden = false
+  draw()
 }
 
 // A folder as a project: added when it is a git repository already, made one on this PC when it is
@@ -4940,7 +5117,7 @@ async function createProjectPrompt() {
 function openProjectAdd(at) {
   showActions('프로젝트 추가', [
     ['새 프로젝트 만들기', 'folder-plus', () => void createProjectPrompt()],
-    [ON_THIS_PC ? '폴더 찾기… (탐색기)' : '폴더 찾기…', 'folder-open', () => void findProjectFolder()],
+    [ON_THIS_PC ? '폴더 찾기… (탐색기)' : 'PC 프로젝트 찾기…', 'folder-open', () => void findProjectFolder()],
     ['GitHub에서 가져오기…', 'github', openGithubClone],
   ], at)
 }
@@ -5165,8 +5342,8 @@ function openGithubClone() {
 const OPTION_GROUPS = [
   ['작업 공간 정렬', () => listSort, (value) => {
     listSort = value
-    save(SORT_KEY, value === 'recent' ? null : value)
-  }, [['recent', '최근 활동'], ['name', '이름']]],
+    save(SORT_KEY, value === 'name' ? null : value)
+  }, [['name', '이름'], ['recent', '최근 활동']]],
   ['묶기', () => listGroup, (value) => {
     listGroup = value
     save(GROUP_KEY, value === 'project' ? null : value)
@@ -5183,7 +5360,7 @@ const OPTION_GROUPS = [
 
 // How many options differ from the defaults, for the phone chip's badge.
 function changedOptions() {
-  return [listSort !== 'recent', listGroup !== 'project', listFilter !== 'all', agentsView !== 'full'].filter(Boolean).length
+  return [listSort !== 'name', listGroup !== 'project', listFilter !== 'all', agentsView !== 'full'].filter(Boolean).length
 }
 
 function openListOptions(anchor) {
@@ -5280,7 +5457,8 @@ function renderDrawer() {
       group.className = 'proj'
       group.append(projectHead(project, project.worktrees.length))
 
-      if (!folded.has(key) || searching || trees.some((tree) => tree.sessions.some((session) => session.id === current))) {
+      // A folded project stays folded, even with the open tab inside it; a search shows everything.
+      if (!folded.has(key) || searching) {
         for (const tree of trees) group.append(worktreeRow(tree))
       }
 
@@ -7764,6 +7942,8 @@ window.choiterm = {
   back,
   // The phone app's own update: download progress, then installing, done or an error.
   update: showUpdateProgress,
+  // The project finder a phone gets from 프로젝트 추가 (the PC opens Windows' dialog instead).
+  findProjects: openProjectFinder,
   // For checks from outside (and the phone app): show a screen, start a new workspace.
   view: setView,
   create: openCreate,

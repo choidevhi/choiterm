@@ -329,6 +329,15 @@ class MainActivity : Activity() {
         }
     }
 
+    // Android 12 has no back callback yet: the same back, one layer of the page at a time.
+    // Lint warns that gestures skip this on Android 16; there the callback from onCreate answers.
+    @SuppressLint("GestureBackNavigation")
+    @Deprecated("Android 13 and later use the OnBackInvokedCallback registered in onCreate")
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        goBack()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         web.saveState(outState)

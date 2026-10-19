@@ -230,6 +230,14 @@ function serveFile(req: IncomingMessage, res: ServerResponse, files: Map<string,
   res.end(body)
 }
 
+// Where to look for a project on this PC from a phone: the usual folders, and the git
+// repositories already in them.
+export interface ProjectSuggestions {
+  home: string
+  places: { name: string; path: string }[]
+  repos: string[]
+}
+
 export interface Download {
   name: string
   body: Buffer
@@ -304,6 +312,7 @@ type JsonBody =
   | { repos: GithubRepo[] | null }
   | { signIn: SignIn | null }
   | { version: string | null }
+  | ProjectSuggestions
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -374,6 +383,7 @@ export interface Extras {
   addWorktree?: (project: string, branch: string, base: string | null) => Promise<string | null>
   // A project's branches and the one new work starts from by default.
   branches?: (project: string) => Promise<{ branches: string[]; base: string } | null>
+  suggestProjects?: () => ProjectSuggestions
   // A plain folder made a git project on this PC and added to the list, or why it was not.
   initProject?: (folder: string) => Promise<{ ok: true; project: string } | { ok: false; error: string }>
   // A new project folder (in the home folder), added to the list; null when the name is refused.
@@ -983,6 +993,12 @@ export function startServer(
         if (links === null) sendJson(res, 409, { error: 'that port is not a running web server' })
         else sendJson(res, 200, { url: links.tailnet, local: links.local })
       }).catch(() => sendJson(res, 400, { error: 'bad request' }))
+
+      return
+    }
+
+    if (req.method === 'GET' && path === '/projects/suggest' && extras.suggestProjects !== undefined) {
+      sendJson(res, 200, extras.suggestProjects())
 
       return
     }

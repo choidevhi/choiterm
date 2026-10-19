@@ -18,7 +18,7 @@ const NAMES = [
   'git-compare-arrows', 'git-fork', 'git-merge', 'git-pull-request', 'git-pull-request-closed', 'git-pull-request-draft', 'github', 'globe', 'grip-vertical',
   'heading-1', 'heading-2', 'heading-3', 'history', 'house', 'image', 'images', 'italic', 'keyboard', 'layout-grid', 'list', 'list-checks',
   'list-ordered', 'list-todo', 'loader-circle', 'lock', 'log-in', 'message-circle-question', 'message-square-plus', 'monitor', 'moon', 'mouse-pointer-click',
-  'panel-left', 'panel-right', 'paperclip', 'pencil', 'pin', 'pin-off', 'play', 'plus', 'qr-code', 'quote', 'refresh-cw', 'rotate-ccw', 'save',
+  'panel-left', 'panel-right', 'paperclip', 'palette', 'pencil', 'pin', 'pin-off', 'play', 'plus', 'qr-code', 'quote', 'refresh-cw', 'rotate-ccw', 'save',
   'search', 'send', 'server', 'server-off', 'settings', 'settings-2', 'sliders-horizontal', 'smartphone', 'sparkles', 'square-check',
   'square-chevron-right', 'square-split-horizontal', 'square-terminal', 'sticky-note', 'strikethrough', 'tag', 'terminal', 'trash-2',
   'triangle-alert', 'upload', 'x', 'zap',

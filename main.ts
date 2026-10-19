@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { freemem, homedir, totalmem } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,7 +24,7 @@ import { configFor, packageVersion, SERVER_PORT } from './setup.ts'
 import { createNotices } from './notices.ts'
 import { createSessions, type Resume, type SessionKind } from './sessions.ts'
 import { launchFolder, loadSessions, saveSessions } from './store.ts'
-import { CLAUDE_CONFIG, trustFolders, trustRoot } from './trust.ts'
+import { CLAUDE_CONFIG, findRepositories, trustFolders, trustRoot } from './trust.ts'
 import { loadStaticFiles, parseSettings, startServer, type Download } from './server.ts'
 import type { ServerMessage } from './sessions.ts'
 
@@ -285,6 +285,8 @@ let announce: (message: ServerMessage) => void = () => {}
 
 // A second copy keeps its own lists, so trying changes never touches the real sessions or gallery.
 const MACHINE_REPORT_KEEP = 100_000
+// Home, Desktop, a project folder in it, and one more level: where projects usually sit.
+const SUGGEST_DEPTH = 3
 const dataFile = (name: string): string => join(home, 'data', process.env.CHOITERM_PORT === undefined ? `${name}.json` : `${name}-${settings.port}.json`)
 const sessionsFile = dataFile('sessions')
 const galleryFile = dataFile('gallery')
@@ -446,6 +448,24 @@ const running = startServer(settings, sessions, files, log, {
     return folder === null ? null : projects.add(folder)
   },
   pickFolder: (start) => pickFolder(start || homedir(), 'ChoiTerm 폴더 선택'),
+  suggestProjects: () => {
+    const home = homedir()
+    const places = [['홈', home], ['바탕화면', join(home, 'Desktop')], ['문서', join(home, 'Documents')], ['다운로드', join(home, 'Downloads')]]
+    const existing: { name: string; path: string }[] = []
+
+    for (const [name, path] of places) {
+      if (existsSync(path)) existing.push({ name, path })
+    }
+
+    // Main checkouts only: a worktree's .git is a file, and it shows under its project anyway.
+    const repos: string[] = []
+
+    for (const path of findRepositories(home, SUGGEST_DEPTH)) {
+      if (statSync(join(path, '.git')).isDirectory()) repos.push(path)
+    }
+
+    return { home, places: existing, repos }
+  },
   initProject: async (folder) => {
     const made = await initProject(folder, homedir())
 

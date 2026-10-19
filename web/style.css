@@ -705,7 +705,7 @@ svg.lucide { display: block; flex: none; }
 .side-filter:focus-within { border-color: var(--ring); }
 
 .list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 1px 6px 10px 4px; scrollbar-width: thin; }
-@media (pointer: fine) { .proj-mark { color: var(--muted) !important; } }
+@media (pointer: fine) { .proj-mark:not([data-own-colour]) { color: var(--muted) !important; } }
 .side-toolbar { display: flex; align-items: center; flex: none; padding: 6px 8px; border-top: 1px solid var(--line); }
 .drawer-foot { display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--line); }
 .drawer-foot .danger { flex: 1.4; }
@@ -726,6 +726,26 @@ svg.lucide { display: block; flex: none; }
 /* A workspace card: status slot, title 13px, branch 11px, its agents in 24px rows. */
 .card { position: relative; display: flex; flex-direction: column; width: calc(100% - 4px); margin: 6px 0 0 4px; padding: 5px 6px 6px 12px; border: 1px solid transparent; border-radius: 10px; cursor: pointer; outline: none; user-select: none; transition: background-color 0.2s, border-color 0.2s; }
 .card:first-of-type { margin-top: 2px; }
+/* A line between workspaces, with room above and below it. */
+.card + .card { margin-top: 15px; }
+.card + .card::before { content: ''; position: absolute; left: 12px; right: 8px; top: -9px; height: 1px; background: var(--line); pointer-events: none; }
+.card-add { flex: none; margin-left: auto; color: var(--muted); }
+.card-add:hover { background: color-mix(in oklab, var(--strong) 10%, transparent); color: var(--strong); }
+@media (hover: hover) {
+  .card:not(:hover):not(:focus-within) .card-add { opacity: 0; }
+}
+
+.swatches { display: grid; grid-template-columns: repeat(7, 28px); gap: 8px; padding: 6px 8px 8px; }
+.swatch { width: 28px; height: 28px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1); }
+.swatch[data-chosen] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--strong); }
+.finder-list { margin: 8px 0 12px; }
+.finder-row svg { flex: none; color: var(--muted); }
+.finder-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.finder-name { color: var(--strong); font-size: 14px; font-weight: 500; }
+.finder-path { overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.finder-row .badge-primary { flex: none; }
+.sheet-body .swatches { grid-template-columns: repeat(7, 1fr); gap: 12px; padding: 4px 0 14px; }
+.sheet-body .swatch { width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; }
 .card:hover { background: color-mix(in srgb, var(--strong) 4%, transparent); }
 .card[data-current] { border-color: color-mix(in srgb, var(--line) 40%, transparent); background: color-mix(in srgb, var(--strong) 8%, transparent); box-shadow: 0 1px 2px color-mix(in srgb, var(--strong) 4%, transparent); }
 .card-row { display: flex; align-items: flex-start; gap: 2px; min-width: 0; }
@@ -1140,7 +1160,7 @@ svg.lucide { display: block; flex: none; }
 .host-go { display: grid; place-items: center; width: 32px; color: var(--faint); }
 .resume-sub { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--muted); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .resume-sub i { flex: none; width: 7px; height: 7px; border-radius: 3.5px; }
-.quick-actions { display: flex; gap: 8px; }
+.quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .quick-action { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600; }
 .quick-tile { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--raised); }
 .usage-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
