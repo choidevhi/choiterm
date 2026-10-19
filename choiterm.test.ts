@@ -20,6 +20,7 @@ import { pickerScript } from './folder-picker.ts'
 import { applyInput, createDrafts } from './drafts.ts'
 import { autoCommit, createdNote, createRelay, mergeToProject, turnNote } from './teamwork.ts'
 import { createProjects } from './projects.ts'
+import { deleteNote, listNotes, noteTitle, projectNotesFolder } from './notes.ts'
 import { cleanRepoName, createGithub, parseRepos, parseSignIn, type GhResult, type SignInProcess } from './github.ts'
 import { createTurnWatch } from './turns.ts'
 import { parseProcessTable, portsBySession } from './ports.ts'
@@ -1684,4 +1685,42 @@ test('github: no gh on this PC', async () => {
 
   assert.deepEqual(await github.state(), { installed: false, login: null, signIn: null })
   assert.equal(await github.signIn(), null)
+})
+
+test('notes: loose and per project, titled by their first line, removed only inside the notes folder', () => {
+  const root = mkdtempSync(join(tmpdir(), 'choiterm-notes-'))
+
+  try {
+    assert.equal(noteTitle('\n\n#  Plan for today\nmore', 'a.md'), 'Plan for today')
+    assert.equal(noteTitle('', '2026-10-20-0100.md'), '2026-10-20-0100')
+
+    const one = projectNotesFolder(root, 'C:\\work\\app')
+    const other = projectNotesFolder(root, 'D:\\elsewhere\\app')
+
+    assert.ok(one.startsWith(join(root, 'projects', 'app-')))
+    assert.notEqual(one, other)
+    assert.equal(projectNotesFolder(root, 'c:\\WORK\\app'), one)
+
+    writeFileSync(join(root, 'a.md'), '# A note')
+    writeFileSync(join(root, 'skip.txt'), 'not a note')
+
+    const listed = listNotes(root)
+
+    assert.deepEqual(listed.map((each) => each.title), ['A note'])
+    assert.deepEqual(listNotes(one), [])
+    assert.ok(existsSync(one))
+
+    const outside = join(tmpdir(), `choiterm-not-a-note-${Date.now()}.md`)
+
+    writeFileSync(outside, 'keep')
+    assert.equal(deleteNote(root, outside), false)
+    assert.ok(existsSync(outside))
+    rmSync(outside)
+    assert.equal(deleteNote(root, join(root, 'skip.txt')), false)
+    assert.equal(deleteNote(root, join(root, '..', 'a.md')), false)
+    assert.equal(deleteNote(root, join(root, 'a.md')), true)
+    assert.equal(existsSync(join(root, 'a.md')), false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })

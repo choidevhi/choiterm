@@ -17,6 +17,7 @@ import type { Meta } from './meta.ts'
 import { cleanBranch } from './repo.ts'
 import type { Project, Projects } from './projects.ts'
 import type { Github, GithubRepo, GithubState, SignIn } from './github.ts'
+import { deleteNote, listNotes, projectNotesFolder, type Note } from './notes.ts'
 import type { ServerMessage, SessionKind, Sessions, Viewer } from './sessions.ts'
 
 export interface Settings {
@@ -313,6 +314,7 @@ type JsonBody =
   | { signIn: SignIn | null }
   | { version: string | null }
   | ProjectSuggestions
+  | { folder: string; notes: Note[] }
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -1024,7 +1026,7 @@ export function startServer(
     }
 
     // Changes to projects and worktrees: from this app's page only.
-    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/projects/init' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove' || path === '/github/sign-in' || path === '/github/clone')) {
+    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/projects/init' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove' || path === '/github/sign-in' || path === '/github/clone' || path === '/notes/delete')) {
       if (!sameOrigin(req)) {
         sendJson(res, 403, { error: 'forbidden' })
         req.resume()
@@ -1050,6 +1052,8 @@ export function startServer(
           const project = await extras.createProject(raw.name)
 
           sendJson(res, project === null ? 400 : 200, project === null ? { ok: false } : { ok: true, project })
+        } else if (path === '/notes/delete' && typeof raw?.path === 'string' && extras.notesFolder !== undefined) {
+          sendJson(res, 200, { ok: deleteNote(extras.notesFolder, raw.path) })
         } else if (path === '/github/sign-in' && extras.github !== undefined) {
           sendJson(res, 200, { signIn: await extras.github.signIn() })
         } else if (path === '/github/clone' && typeof raw?.repo === 'string' && extras.github !== undefined && extras.projects !== undefined) {
@@ -1091,11 +1095,16 @@ export function startServer(
       return
     }
 
+    // The loose notes, or one project's (?project=<its folder>).
     if (req.method === 'GET' && path === '/notes' && extras.notesFolder !== undefined) {
-      const folder = extras.notesFolder
+      const project = new URL(req.url ?? '/', 'http://local').searchParams.get('project') ?? ''
+      const folder = isAbsolute(project) ? projectNotesFolder(extras.notesFolder, project) : extras.notesFolder
 
-      mkdirSync(folder, { recursive: true })
-      void listFolder(folder).then((entries) => sendJson(res, 200, { folder, entries: (entries ?? []).filter((entry) => !entry.dir && /\.md$/i.test(entry.name)) }))
+      try {
+        sendJson(res, 200, { folder, notes: listNotes(folder) })
+      } catch {
+        sendJson(res, 500, { error: 'notes unavailable' })
+      }
 
       return
     }

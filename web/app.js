@@ -852,7 +852,7 @@ function renderAddMenu(cwd = currentFolder()) {
 
   field.className = 'menu-search'
   field.type = 'search'
-  field.placeholder = '열 것 찾기…'
+  field.placeholder = '에이전트 찾기…'
   field.addEventListener('input', draw)
   field.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') rows.querySelector('button:not(:disabled):not(.menu-more)')?.click()
@@ -4422,7 +4422,7 @@ function openProjectColour(project, at) {
   sheet.hidden = false
 }
 
-function openTree(tree) {
+function openTree(tree, anchor = document.body) {
   const session = latestSession(tree)
 
   if (session !== undefined) {
@@ -4432,9 +4432,9 @@ function openTree(tree) {
     return
   }
 
-  // An empty workspace opens with a terminal in it, like a never-visited one in the reference
-  // design; agents start from the + menu or by typing their command there.
-  openSession('shell', tree.path)
+  // An empty workspace asks which agent to start in it. The menu closes on a press outside, and
+  // this click's press came before the menu opened, so it stays.
+  openAddMenuAt(anchor, tree.path)
 }
 
 // A workspace's state: an amber bell for something new, a turning ring while
@@ -4621,9 +4621,9 @@ function worktreeRow(tree) {
 
   row.append(treeStatus(tree), body)
   card.append(row)
-  card.addEventListener('click', () => openTree(tree))
+  card.addEventListener('click', () => openTree(tree, card))
   card.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && event.target === card) openTree(tree)
+    if (event.key === 'Enter' && event.target === card) openTree(tree, card)
   })
   onLongPress(card, (at) => openTreeMenu(tree, at))
 
@@ -7090,20 +7090,77 @@ screen.addEventListener('contextmenu', (event) => {
   placeContextMenu(event.clientX, event.clientY)
 })
 
-// ---- Notes: markdown files kept by ChoiTerm, opened and edited in tabs.
-async function openNotesSheet() {
+// ---- Notes: markdown files kept by ChoiTerm (outside every repository), opened and edited in
+// tabs. 공통 holds the loose ones; each project has its own. A long press (a right click on the PC)
+// on a note tags it to an agent, copies its path or deletes it.
+let notesScope = null
+
+// How an agent is pointed at a file: Claude Code reads @path; a path with spaces goes in quotes.
+const fileMention = (path) => (/\s/.test(path) ? `@"${path}"` : `@${path}`)
+
+async function tagNote(path) {
+  const live = sessions.filter((session) => !session.archived)
+
+  if (live.length === 0) {
+    notice('먼저 에이전트를 열어 주세요')
+
+    return
+  }
+
+  // The agent last used gets it; with none yet, the owner says which one.
+  const target = current ?? await pickFrom(document.body, '어느 에이전트에 붙일까요', live.map((session) => ({ value: session.id, label: plainName(session), mark: agentIcon(session.kind, 14).outerHTML })), null)
+
+  if (target === null) return
+
+  // Back on that agent's terminal (a note tab may cover it), so the mention is seen where it goes.
+  closeDrawer()
+  select(target)
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  insertPaths([fileMention(path)], false)
+  notice('메모를 에이전트 입력칸에 붙였어요')
+}
+
+function noteActions(item, at) {
+  showActions(item.title, [
+    ['열기', 'file-text', () => openFile(item.path)],
+    ['에이전트에 태그', 'at-sign', () => void tagNote(item.path)],
+    ['경로 복사', 'copy', () => void copyText(item.path)],
+    ['삭제', 'trash-2', () => showActions(`"${item.title}" 메모를 지울까요?`, [
+      ['지우기', 'trash-2', async () => {
+        const reply = await postJson('/notes/delete', { path: item.path }).then((response) => response.json()).catch(() => null)
+
+        notice(reply?.ok ? '메모를 지웠어요' : '메모를 지우지 못했어요')
+        void openNotesSheet(notesScope)
+      }, true],
+      ['취소', 'x', () => void openNotesSheet(notesScope)],
+    ], at), true],
+  ], at)
+}
+
+async function openNotesSheet(scope = metaById.get(current)?.repo?.project ?? null) {
+  notesScope = scope
   sheetTitle.textContent = '메모'
   sheetBody.replaceChildren(note('불러오는 중…'))
   sheet.hidden = false
 
-  const reply = await getJson('/notes')
+  const reply = await getJson(scope === null ? '/notes' : `/notes?project=${encodeURIComponent(scope)}`)
 
   sheetBody.replaceChildren()
 
-  if (reply === null) {
+  if (reply === null || !Array.isArray(reply.notes)) {
     sheetBody.append(note('메모를 열 수 없어요'))
 
     return
+  }
+
+  // Where the notes are: 공통, or one of the git projects.
+  const scopes = document.createElement('div')
+
+  scopes.className = 'chips note-scopes'
+  scopes.append(chip('공통', () => void openNotesSheet(null), { 'data-on': scope === null }))
+
+  for (const project of knownProjects()) {
+    if (project.git) scopes.append(chip(project.name, () => void openNotesSheet(project.project), { 'data-on': keyOf(project.project) === keyOf(scope) }))
   }
 
   const actions = document.createElement('div')
@@ -7114,7 +7171,7 @@ async function openNotesSheet() {
   actions.append(chip('새 메모', async () => {
     const stamp = new Date()
     const pad = (value) => String(value).padStart(2, '0')
-    const name = `${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())} ${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.md`
+    const name = `${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.md`
     const path = `${reply.folder}\\${name}`
     const made = await fetch('/fs/write', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, text: '# 새 메모\n\n', expected: null }) }).catch(() => null)
 
@@ -7128,9 +7185,7 @@ async function openNotesSheet() {
     openFile(path, null, true)
   }, { 'data-primary': true }))
 
-  const entries = [...reply.entries].sort((a, b) => b.modified - a.modified)
-
-  for (const entry of entries) {
+  for (const item of reply.notes) {
     const row = document.createElement('button')
     const words = document.createElement('span')
     const when = document.createElement('small')
@@ -7138,20 +7193,23 @@ async function openNotesSheet() {
     row.type = 'button'
     row.className = 'sheet-row'
     row.innerHTML = UI.note
-    words.textContent = entry.name.replace(/\.md$/i, '')
-    when.textContent = ` ${since(entry.modified)} 전`
+    words.textContent = item.title
+    when.textContent = ` ${since(item.modified)} 전`
     words.append(when)
     row.append(words)
     row.addEventListener('click', () => {
       sheet.hidden = true
-      openFile(entry.path)
+      openFile(item.path)
     })
+    onLongPress(row, (at) => noteActions(item, at))
     rows.append(row)
   }
 
-  if (entries.length === 0) rows.append(note('메모가 없어요'))
+  if (reply.notes.length === 0) rows.append(note(scope === null ? '공통 메모가 없어요' : '이 프로젝트의 메모가 없어요'))
 
-  sheetBody.append(actions, rows)
+  const hint = Object.assign(document.createElement('p'), { className: 'note-hint', textContent: touch ? '메모를 길게 누르면 에이전트에 태그하거나 지울 수 있어요' : '메모를 우클릭하면 에이전트에 태그하거나 지울 수 있어요' })
+
+  sheetBody.append(scopes, actions, rows, hint)
 }
 
 $('openNotes').addEventListener('click', () => void openNotesSheet())

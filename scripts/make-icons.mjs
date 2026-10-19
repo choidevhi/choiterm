@@ -10,7 +10,7 @@ const lucide = join(root, 'node_modules', 'lucide-static', 'icons')
 const lobe = join(root, 'node_modules', '@lobehub', 'icons-static-svg', 'icons')
 
 const NAMES = [
-  'activity', 'archive', 'archive-restore', 'arrow-big-up', 'arrow-down', 'arrow-down-to-line', 'arrow-left', 'arrow-right', 'arrow-up', 'arrow-up-down',
+  'activity', 'archive', 'archive-restore', 'arrow-big-up', 'arrow-down', 'arrow-down-to-line', 'arrow-left', 'arrow-right', 'arrow-up', 'arrow-up-down', 'at-sign',
   'bell', 'bell-off', 'bold', 'book-open', 'calendar-clock', 'case-sensitive', 'check', 'chevron-down', 'chevron-left', 'chevron-right',
   'chevron-up', 'chevrons-up-down', 'circle-check', 'circle-dashed', 'circle-dot', 'circle-help', 'circle-user', 'circle-x', 'clipboard-paste',
   'code', 'columns-2', 'copy', 'corner-down-left', 'crosshair', 'delete', 'download', 'ellipsis', 'ellipsis-vertical', 'external-link', 'eye', 'file',

@@ -738,6 +738,9 @@ svg.lucide { display: block; flex: none; }
 .swatches { display: grid; grid-template-columns: repeat(7, 28px); gap: 8px; padding: 6px 8px 8px; }
 .swatch { width: 28px; height: 28px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1); }
 .swatch[data-chosen] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--strong); }
+.note-scopes { flex-wrap: nowrap; margin-bottom: 10px; padding-bottom: 10px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.note-scopes button { flex: none; }
+.note-hint { margin: 12px 4px 0; color: var(--faint); font-size: 11px; }
 .finder-list { margin: 8px 0 12px; }
 .finder-row svg { flex: none; color: var(--muted); }
 .finder-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
