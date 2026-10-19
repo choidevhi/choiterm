@@ -4342,7 +4342,23 @@ function worktreeRow(tree) {
 
   if (tree.primary && tree.project.git) title.append(Object.assign(document.createElement('span'), { className: 'badge-primary', textContent: '기본' }))
 
-  if (!tree.project.git) title.append(Object.assign(document.createElement('span'), { className: 'badge-primary', textContent: '폴더' }))
+  // A plain folder (not git yet) says so, with the one click that makes it a project.
+  if (!tree.project.git && tree.path) {
+    const start = document.createElement('button')
+
+    start.type = 'button'
+    start.className = 'badge-action'
+    start.innerHTML = `${icon('git-branch', 11)}<span>git 시작</span>`
+    start.title = '이 폴더를 git 프로젝트로 (이 PC에만, GitHub에는 올리지 않아요)'
+    start.addEventListener('click', (event) => {
+      event.stopPropagation()
+      start.disabled = true
+      void initFolder(tree.path).then(() => {
+        start.disabled = false
+      })
+    })
+    title.append(start)
+  }
 
   if (pins.has(key)) title.insertAdjacentHTML('beforeend', `<span class="pin-mark" title="고정">${icon('pin', 11)}</span>`)
 
@@ -4717,20 +4733,41 @@ async function findProjectFolder() {
 
   const folder = await pickFolderOnPc()
 
-  if (folder === null) return
+  if (folder !== null) await addProjectFolder(folder)
+}
 
-  const reply = await postJson('/projects', { path: folder }).then((response) => response.json()).catch(() => null)
+// A folder as a project: added when it is a git repository already, made one on this PC when it is
+// not (nothing goes to GitHub), and opened as a plain folder when it should not be one (a drive,
+// the home folder, far too many files).
+async function addProjectFolder(folder) {
+  const added = await postJson('/projects', { path: folder }).then((response) => response.json()).catch(() => null)
 
-  if (reply?.ok) {
-    notice(`프로젝트를 추가했어요: ${baseName(reply.project)}`)
+  if (added?.ok) {
+    notice(`프로젝트를 추가했어요: ${baseName(added.project)}`)
     void refreshProjects()
 
     return
   }
 
-  // Not a git repository: work in it as a folder instead.
-  notice('git 저장소가 아니라서 폴더로 열어요')
+  if (await initFolder(folder)) return
+
   openAddMenuAt(document.body, folder)
+}
+
+// One click from a plain folder to a git project; says why when it will not.
+async function initFolder(folder) {
+  const made = await postJson('/projects/init', { path: folder }).then((response) => response.json()).catch(() => null)
+
+  if (made?.ok) {
+    notice(`git 프로젝트로 시작했어요: ${baseName(made.project)}`)
+    void refreshProjects()
+
+    return true
+  }
+
+  notice(`${made?.error ?? 'git으로 만들지 못했어요'}. 폴더로 열어요`)
+
+  return false
 }
 
 // A folder to open an agent in: Windows' dialog on this PC, the in-page walk elsewhere.
@@ -5227,6 +5264,8 @@ function openTreeMenu(tree, at) {
       renderDrawer()
     }],
   ]
+
+  if (!tree.project.git && tree.path) entries.push(['git 프로젝트로 시작', 'git-branch', () => void initFolder(tree.path)])
 
   if (tree.project.git && tree.branch && tree.project.worktrees.length > 1) entries.push(['다른 작업 공간 변경 가져오기', 'git-compare-arrows', () => takeFromOther(tree)])
 
@@ -7612,10 +7651,7 @@ function openFolderSheet(start, addProject = false) {
         return
       }
 
-      const reply = await fetch('/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: folder }) }).then((r) => r.json()).catch(() => null)
-
-      notice(reply?.ok ? `프로젝트를 추가했어요: ${reply.project}` : 'git 저장소가 아니에요')
-      void refreshProjects()
+      await addProjectFolder(folder)
     }, { 'data-primary': true, disabled: folder === null }))
 
     if (addProject) agentChips.hidden = true

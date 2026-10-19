@@ -13,7 +13,7 @@ import { createPreviews, tailscaleServe, tailscaleUnserve } from './previews.ts'
 import { startProxy } from './proxy.ts'
 import { codexUsage } from './usage.ts'
 import { createTurnWatch } from './turns.ts'
-import { addWorktree, createProject, createRepoLookup, listBranches, listWorktrees, mergeBranch, removeWorktree } from './repo.ts'
+import { addWorktree, createProject, createRepoLookup, initProject, listBranches, listWorktrees, mergeBranch, removeWorktree } from './repo.ts'
 import { pickFolder } from './folder-picker.ts'
 import { createGithub } from './github.ts'
 import { autoCommit, commitsAhead, createdNote, createRelay, mergeInto, mergeToProject, turnNote } from './teamwork.ts'
@@ -433,6 +433,17 @@ const running = startServer(settings, sessions, files, log, {
     return folder === null ? null : projects.add(folder)
   },
   pickFolder: (start) => pickFolder(start || homedir(), 'ChoiTerm 폴더 선택'),
+  initProject: async (folder) => {
+    const made = await initProject(folder, homedir())
+
+    log(made.ok ? `git project at ${made.folder}` : `git project refused at ${folder}: ${made.error}`)
+
+    if (!made.ok) return made
+
+    const project = await projects.add(made.folder)
+
+    return project === null ? { ok: false, error: '프로젝트로 넣지 못했어요' } : { ok: true, project }
+  },
   github: createGithub(homedir()),
   removeWorktree: async (project, path) => {
     const removed = await removeWorktree(project, path)

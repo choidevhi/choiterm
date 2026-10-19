@@ -1,7 +1,8 @@
 // Which git project and branch a session's folder belongs to, for grouping the session list by
 // project, and new git worktrees, so each task can get a folder and branch of its own.
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { hostname, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 
 export interface RepoInfo {
@@ -16,10 +17,16 @@ export interface RepoInfo {
 
 const GIT_TIMEOUT_MS = 3000
 const CACHE_MS = 30_000
+// Starting git in a folder of real work reads every file once.
+const INIT_TIMEOUT_MS = 120_000
+// More files than one project has: a whole drive or a home folder picked by mistake.
+const MAX_INIT_FILES = 20_000
 
-export function runGit(args: string[], cwd: string): Promise<string | null> {
+type Git = (args: string[], cwd: string) => Promise<string | null>
+
+export function runGit(args: string[], cwd: string, timeoutMs = GIT_TIMEOUT_MS): Promise<string | null> {
   return new Promise((done) => {
-    execFile('git', args, { cwd, timeout: GIT_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error === null ? stdout : null))
+    execFile('git', args, { cwd, timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => done(error === null ? stdout : null))
   })
 }
 
@@ -37,14 +44,15 @@ export function parseRevParse(dir: string, output: string): RepoInfo | null {
   return { project, name: basename(project), root, branch: branch === 'HEAD' ? '' : (branch ?? ''), worktree: project.toLowerCase() !== root.toLowerCase() }
 }
 
-export function createRepoLookup(git: (args: string[], cwd: string) => Promise<string | null> = runGit, now: () => number = Date.now): (dir: string) => Promise<RepoInfo | null> {
+// `fresh` skips the cache (and refills it): a folder that just became a repository.
+export function createRepoLookup(git: Git = runGit, now: () => number = Date.now): (dir: string, fresh?: boolean) => Promise<RepoInfo | null> {
   const cache = new Map<string, { at: number; info: Promise<RepoInfo | null> }>()
 
-  return (dir) => {
+  return (dir, fresh = false) => {
     const key = dir.toLowerCase()
     const hit = cache.get(key)
 
-    if (hit !== undefined && now() - hit.at < CACHE_MS) return hit.info
+    if (!fresh && hit !== undefined && now() - hit.at < CACHE_MS) return hit.info
 
     const info = existsSync(dir)
       ? git(['rev-parse', '--show-toplevel', '--git-common-dir', '--abbrev-ref', 'HEAD'], dir).then((out) => (out === null ? null : parseRevParse(dir, out)))
@@ -143,9 +151,101 @@ export async function createProject(parent: string, name: string, git: (args: st
 
   if ((await git(['init', '-b', 'main'], folder)) === null) return null
 
-  const committed = await git(['commit', '--allow-empty', '-m', '시작'], folder)
+  const committed = await git([...(await identity(folder, git)), 'commit', '--allow-empty', '-m', '시작'], folder)
 
   return committed === null ? null : folder
+}
+
+// A commit needs a name and an email; on a PC where git was never told them, this PC's user stands
+// in, so the first commit works. Set ones are left alone.
+export async function identity(folder: string, git: Git = runGit): Promise<string[]> {
+  const email = await git(['config', 'user.email'], folder)
+
+  if (email !== null && email.trim() !== '') return []
+
+  const name = userInfo().username || 'choiterm'
+
+  return ['-c', `user.name=${name}`, '-c', `user.email=${name}@${hostname().toLowerCase()}.local`]
+}
+
+// What a first commit leaves out: dependencies, build output, local secrets and system clutter.
+export const STARTER_GITIGNORE = [
+  'node_modules/',
+  '.venv/',
+  'venv/',
+  '__pycache__/',
+  'dist/',
+  'build/',
+  'out/',
+  'target/',
+  '.next/',
+  '.gradle/',
+  '*.log',
+  '.env',
+  '.env.*',
+  '!.env.example',
+  '*.key',
+  '*.pem',
+  '*.jks',
+  '*.keystore',
+  'Thumbs.db',
+  'desktop.ini',
+  '.DS_Store',
+  '',
+].join('\n')
+
+// Folders too wide to be one project: a drive, the home folder and the usual folders in it, the
+// folder of all users, and Windows' own.
+export function tooWideForProject(folder: string, home: string): boolean {
+  const path = resolve(folder).toLowerCase().replace(/[\\/]+$/, '')
+
+  if (/^[a-z]:$/.test(path)) return true
+
+  const wide = [home, dirname(home), ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Videos', 'Music', 'OneDrive', 'AppData'].map((name) => join(home, name))]
+
+  return wide.some((each) => resolve(each).toLowerCase() === path) || /^[a-z]:\\(windows|program files|program files \(x86\)|programdata)(\\|$)/.test(path)
+}
+
+export type InitResult = { ok: true; folder: string } | { ok: false; error: string }
+
+const slowGit: Git = (args, cwd) => runGit(args, cwd, INIT_TIMEOUT_MS)
+
+// Turns a plain folder into a git project on this PC (nothing goes to GitHub): a starter
+// .gitignore unless it has one, `git init`, then a first commit of what is there. Undone again when
+// it cannot finish, or when the folder holds far more files than a project.
+export async function initProject(folder: string, home: string, git: Git = slowGit): Promise<InitResult> {
+  if (!existsSync(folder) || !statSync(folder).isDirectory()) return { ok: false, error: '폴더가 없어요' }
+
+  if (tooWideForProject(folder, home)) return { ok: false, error: '너무 넓은 폴더라 git으로 만들지 않았어요' }
+
+  // Already a repository, or inside one: adding it is enough.
+  if ((await git(['rev-parse', '--show-toplevel'], folder)) !== null) return { ok: true, folder }
+
+  const ignore = join(folder, '.gitignore')
+  const wroteIgnore = !existsSync(ignore)
+
+  const undo = (error: string): InitResult => {
+    rmSync(join(folder, '.git'), { recursive: true, force: true })
+
+    if (wroteIgnore) rmSync(ignore, { force: true })
+
+    return { ok: false, error }
+  }
+
+  if (wroteIgnore) writeFileSync(ignore, STARTER_GITIGNORE)
+
+  if ((await git(['init', '-b', 'main'], folder)) === null) return undo('git을 시작하지 못했어요')
+
+  // Counted before anything is stored: a folder this big would fill .git for nothing.
+  const files = await git(['ls-files', '--others', '--exclude-standard'], folder)
+
+  if (files === null || files.split('\n').length > MAX_INIT_FILES) return undo('파일이 너무 많아서 git으로 만들지 않았어요')
+
+  if ((await git(['add', '-A'], folder)) === null) return undo('파일을 담지 못했어요')
+
+  if ((await git([...(await identity(folder, git)), 'commit', '--allow-empty', '-m', '시작'], folder)) === null) return undo('첫 커밋을 만들지 못했어요')
+
+  return { ok: true, folder }
 }
 
 export interface Worktree {

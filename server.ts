@@ -370,6 +370,8 @@ export interface Extras {
   addWorktree?: (project: string, branch: string, base: string | null) => Promise<string | null>
   // A project's branches and the one new work starts from by default.
   branches?: (project: string) => Promise<{ branches: string[]; base: string } | null>
+  // A plain folder made a git project on this PC and added to the list, or why it was not.
+  initProject?: (folder: string) => Promise<{ ok: true; project: string } | { ok: false; error: string }>
   // A new project folder (in the home folder), added to the list; null when the name is refused.
   createProject?: (name: string) => Promise<string | null>
   // Windows' folder picker on this PC's screen; null when cancelled.
@@ -996,7 +998,7 @@ export function startServer(
     }
 
     // Changes to projects and worktrees: from this app's page only.
-    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove' || path === '/github/sign-in' || path === '/github/clone')) {
+    if (req.method === 'POST' && (path === '/projects' || path === '/projects/create' || path === '/projects/init' || path === '/pick-folder' || path === '/git/merge' || path === '/git/merge-into' || path === '/git/worktree-remove' || path === '/github/sign-in' || path === '/github/clone')) {
       if (!sameOrigin(req)) {
         sendJson(res, 403, { error: 'forbidden' })
         req.resume()
@@ -1029,6 +1031,10 @@ export function startServer(
           const project = cloned.ok ? await extras.projects.add(cloned.folder) : null
 
           sendJson(res, project === null ? 409 : 200, project === null ? { ok: false, error: cloned.ok ? '프로젝트로 넣지 못했어요' : cloned.error } : { ok: true, project })
+        } else if (path === '/projects/init' && typeof raw?.path === 'string' && isAbsolute(raw.path) && extras.initProject !== undefined) {
+          const made = await extras.initProject(raw.path)
+
+          sendJson(res, made.ok ? 200 : 409, made)
         } else if (path === '/projects' && typeof raw?.path === 'string' && isAbsolute(raw.path) && extras.projects !== undefined) {
           const project = await extras.projects.add(raw.path)
 

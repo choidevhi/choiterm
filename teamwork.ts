@@ -1,7 +1,7 @@
 // Worktrees working together: a worktree's changes are committed when its agent finishes a turn
 // (never in the project's own checkout), the agent in the project's own checkout is told when a
 // worktree is made and when one finishes a turn, and one worktree can take another's commits.
-import { runGit } from './repo.ts'
+import { identity, runGit } from './repo.ts'
 
 type Git = (args: string[], cwd: string) => Promise<string | null>
 
@@ -25,7 +25,7 @@ export async function autoCommit(folder: string, now: number, git: Git = runGit)
 
   if ((await git(['add', '-A'], folder)) === null) return null
 
-  if ((await git(['commit', '-m', `자동 저장 ${clock(now)}`], folder)) === null) return null
+  if ((await git([...(await identity(folder, git)), 'commit', '-m', `자동 저장 ${clock(now)}`], folder)) === null) return null
 
   return { files }
 }

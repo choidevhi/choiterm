@@ -739,6 +739,9 @@ svg.lucide { display: block; flex: none; }
 .card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--strong); font-size: 13px; line-height: 20px; font-weight: 400; }
 .card[data-fresh] .card-name { font-weight: 600; }
 .card[data-empty] .card-name { color: var(--muted); }
+.badge-action { display: inline-flex; flex: none; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border: 1px dashed color-mix(in oklab, var(--strong) 35%, transparent); border-radius: 5px; color: var(--strong); font-size: 10px; font-weight: 600; line-height: 16px; }
+.badge-action:hover { background: var(--hover); }
+.badge-action:disabled { opacity: 0.5; }
 .badge-primary { flex: none; height: 16px; padding: 0 6px; border: 1px solid color-mix(in oklab, var(--strong) 20%, transparent); border-radius: 4px; background: color-mix(in oklab, var(--strong) 6%, transparent); color: color-mix(in oklab, var(--strong) 70%, transparent); font-size: 10px; font-weight: 500; line-height: 14px; }
 .pin-mark { flex: none; color: var(--muted); }
 .card-meta { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: -4px; }

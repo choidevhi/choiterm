@@ -18,7 +18,7 @@ export interface Projects {
 
 export interface ProjectSources {
   file: string
-  repo: (dir: string) => Promise<RepoInfo | null>
+  repo: (dir: string, fresh?: boolean) => Promise<RepoInfo | null>
   worktrees: (project: string) => Promise<Worktree[] | null>
 }
 
@@ -58,7 +58,7 @@ export function createProjects(sources: ProjectSources): Projects {
 
     // A folder inside a repository adds the repository; anything else is refused.
     async add(folder) {
-      const repo = await sources.repo(folder)
+      const repo = await sources.repo(folder, true)
 
       if (repo === null) return null
 

@@ -15,7 +15,7 @@ import { launchFolder, loadSessions, parseSavedSessions, saveSessions } from './
 import { findRepositories, projectKey, trustFolders, trustRoot } from './trust.ts'
 import { createMachines, parseHello, parseTailnet } from './machines.ts'
 import { configFor, listenerPids, withOurHooks, withoutOurHooks, type JsonObject } from './setup.ts'
-import { addWorktree, cleanBranch, cleanProjectName, createProject, listBranches, parseBranches, parseRevParse, parseWorktrees, worktreeFolder } from './repo.ts'
+import { addWorktree, cleanBranch, cleanProjectName, createProject, identity, initProject, listBranches, parseBranches, parseRevParse, parseWorktrees, tooWideForProject, worktreeFolder } from './repo.ts'
 import { pickerScript } from './folder-picker.ts'
 import { applyInput, createDrafts } from './drafts.ts'
 import { autoCommit, createdNote, createRelay, mergeToProject, turnNote } from './teamwork.ts'
@@ -1409,12 +1409,12 @@ test('a new project: a safe folder name in the home folder, a repository with a 
     const folder = await createProject(parent, 'demo', async (args) => {
       calls.push(args)
 
-      return ''
+      return args[0] === 'config' ? 'me@example.com\n' : ''
     })
 
     assert.equal(folder, join(parent, 'demo'))
     assert.deepEqual(calls[0], ['init', '-b', 'main'])
-    assert.deepEqual(calls[1], ['commit', '--allow-empty', '-m', '시작'])
+    assert.deepEqual(calls[2], ['commit', '--allow-empty', '-m', '시작'])
     assert.equal(await createProject(parent, '../escape', async () => ''), null)
   } finally {
     rmSync(parent, { recursive: true, force: true })
@@ -1434,6 +1434,8 @@ test('a worktree agent\'s turn end commits its changes, and only when there are 
   const git = (status: string) => async (args: string[]): Promise<string | null> => {
     calls.push(args)
 
+    if (args[0] === 'config') return 'me@example.com\n'
+
     return args[0] === 'status' ? status : ''
   }
 
@@ -1443,8 +1445,75 @@ test('a worktree agent\'s turn end commits its changes, and only when there are 
   const saved = await autoCommit('C:\\w', new Date(2026, 9, 19, 21, 5).getTime(), git(' M a.ts\n?? b.ts\n'))
 
   assert.deepEqual(saved, { files: 2 })
-  assert.deepEqual(calls.at(-2), ['add', '-A'])
+  assert.deepEqual(calls.at(-3), ['add', '-A'])
   assert.deepEqual(calls.at(-1), ['commit', '-m', '자동 저장 21:05'])
+})
+
+test('a PC where git has no name and email yet still commits, as its own user', async () => {
+  assert.deepEqual(await identity('C:\\w', async () => 'me@example.com\n'), [])
+
+  const stand = await identity('C:\\w', async () => null)
+
+  assert.equal(stand[0], '-c')
+  assert.match(stand[1] ?? '', /^user\.name=.+/)
+  assert.match(stand[3] ?? '', /^user\.email=.+@.+\.local$/)
+})
+
+test('a plain folder becomes a git project, never a drive or the home folder', async () => {
+  const home = 'C:\\Users\\me'
+
+  assert.equal(tooWideForProject('C:\\', home), true)
+  assert.equal(tooWideForProject('D:\\', home), true)
+  assert.equal(tooWideForProject('C:\\Users\\me', home), true)
+  assert.equal(tooWideForProject('C:\\Users\\me\\Desktop\\', home), true)
+  assert.equal(tooWideForProject('C:\\Users', home), true)
+  assert.equal(tooWideForProject('C:\\Program Files\\App', home), true)
+  assert.equal(tooWideForProject('C:\\Users\\me\\Desktop\\app', home), false)
+  assert.equal(tooWideForProject('C:\\Users\\me\\work', home), false)
+
+  const root = mkdtempSync(join(tmpdir(), 'choiterm-init-'))
+  const folder = join(root, 'app')
+
+  try {
+    mkdirSync(join(folder, 'node_modules', 'x'), { recursive: true })
+    writeFileSync(join(folder, 'index.js'), 'hi')
+    writeFileSync(join(folder, '.env'), 'SECRET=1')
+    writeFileSync(join(folder, 'node_modules', 'x', 'a.js'), 'x')
+
+    const made = await initProject(folder, 'C:\\nowhere')
+
+    assert.deepEqual(made, { ok: true, folder })
+    assert.ok(readFileSync(join(folder, '.gitignore'), 'utf8').includes('node_modules/'))
+
+    const { execFileSync } = await import('node:child_process')
+    const tracked = execFileSync('git', ['ls-files'], { cwd: folder, encoding: 'utf8' }).trim().split('\n').sort()
+
+    assert.deepEqual(tracked, ['.gitignore', 'index.js'])
+    // Again: already a repository, nothing more to do.
+    assert.deepEqual(await initProject(folder, 'C:\\nowhere'), { ok: true, folder })
+
+    // Far too many files: everything it made is taken away again.
+    const big = join(root, 'big')
+
+    mkdirSync(big)
+
+    const tooMany = await initProject(big, 'C:\\nowhere', async (args, cwd) => {
+      if (args[0] === 'rev-parse') return null
+
+      if (args[0] === 'ls-files') return 'f\n'.repeat(25_000)
+
+      if (args[0] === 'init') mkdirSync(join(cwd, '.git'))
+
+      return ''
+    })
+
+    assert.deepEqual(tooMany, { ok: false, error: '파일이 너무 많아서 git으로 만들지 않았어요' })
+    assert.equal(existsSync(join(big, '.git')), false)
+    assert.equal(existsSync(join(big, '.gitignore')), false)
+    assert.deepEqual(await initProject('C:\\Users\\me', 'C:\\Users\\me'), { ok: false, error: '폴더가 없어요' })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('notes for the project\'s agent wait while it works and go in together', () => {
