@@ -1,0 +1,44 @@
+{
+  "name": "choiterm",
+  "private": true,
+  "version": "0.9.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --no-warnings main.ts",
+    "test": "node --test --no-warnings choiterm.test.ts",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "build:android": "node scripts/build-android.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource/noto-sans-symbols-2": "^5.3.0",
+    "@highlightjs/cdn-assets": "^11.12.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/headless": "^6.0.0",
+    "@xterm/xterm": "^6.0.0",
+    "html2canvas": "^1.4.1",
+    "marked": "^15.0.12",
+    "node-pty": "^1.1.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@lobehub/icons-static-svg": "^1.95.1",
+    "@tauri-apps/cli": "^2.12.1",
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
+    "lucide-static": "^0.577.0",
+    "typescript": "^7.0.2"
+  },
+  "description": "One terminal for your PC and your phone: Claude Code, Codex and other agents in git worktrees, over Tailscale.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "allowScripts": {
+    "node-pty": false
+  }
+}

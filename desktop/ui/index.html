@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChoiTerm</title>
+  <style>
+    :root { --bg: #FAF9F5; --text: #3D3D3A; --muted: #73726C; --accent: #C96442; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #262624; --text: #E8E6DC; --muted: #9C9A92; --accent: #D97757; color-scheme: dark; } }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--bg); color: var(--text); font: 15px system-ui, 'Malgun Gothic', sans-serif; text-align: center; }
+    p { margin: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    button { margin-top: 8px; padding: 11px 28px; border: 0; border-radius: 12px; background: var(--accent); color: var(--bg); font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <p id="message">ChoiTerm 서버를 찾는 중이에요</p>
+  <p class="muted" id="detail"></p>
+  <button id="retry" hidden>다시 연결</button>
+  <script>
+    // Shown when the PC to open did not answer at once: tries the program's list in order (the PC
+    // shown last, this PC's, the main PC's), keeps trying, and moves on to the first that answers.
+    // While this PC's server is being set up, only it is tried for `wait` ms.
+    const given = window.__choiterm
+    const servers = Array.isArray(given?.servers) ? given.servers : ['http://127.0.0.1:47190/']
+    const waitUntil = Date.now() + (Number(given?.wait) || 0)
+    const message = document.getElementById('message')
+    const detail = document.getElementById('detail')
+    const retry = document.getElementById('retry')
+
+    async function reachable(url) {
+      try {
+        await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(4000) })
+
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    async function connect() {
+      retry.hidden = true
+
+      const installing = Date.now() < waitUntil
+
+      message.textContent = installing ? '이 PC에 ChoiTerm 서버를 준비하는 중이에요' : 'ChoiTerm 서버를 찾는 중이에요'
+
+      for (const url of installing ? servers.slice(0, 1) : servers) {
+        if (await reachable(url)) {
+          location.replace(url)
+
+          return
+        }
+      }
+
+      if (installing) {
+        setTimeout(connect, 1500)
+
+        return
+      }
+
+      message.textContent = 'ChoiTerm 서버에 연결할 수 없어요'
+      detail.textContent = '이 PC의 서버가 꺼져 있고, tailscale로도 다른 PC에 닿지 않아요'
+      retry.hidden = false
+      setTimeout(connect, 15000)
+    }
+
+    retry.addEventListener('click', connect)
+    connect()
+  </script>
+</body>
+</html>

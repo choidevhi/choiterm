@@ -1,0 +1,5 @@
+{
+  "name": "choiterm-status",
+  "version": "0.1.0",
+  "description": "ChoiTerm 상태 바로 보고: 5시간·주간 사용량, 컨텍스트, 캐시, 모델, effort (ChoiTerm 세션에서만)"
+}

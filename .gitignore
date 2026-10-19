@@ -1,0 +1,15 @@
+node_modules/
+choiterm.log
+data/
+config.json
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/dist/
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/bundle/
+*.pid

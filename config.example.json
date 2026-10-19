@@ -1,0 +1,5 @@
+{
+  "owner": "you@example.com",
+  "hosts": ["your-pc.your-tailnet.ts.net:8449"],
+  "port": 47190
+}

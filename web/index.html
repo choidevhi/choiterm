@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <title>ChoiTerm</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/xterm.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Elements with data-icon get that lucide icon (icons.js) when the page starts. -->
+
+  <!-- Phone: the first screen, the owner's desktops, then what to resume. -->
+  <section class="hosts" id="hosts" hidden aria-label="데스크톱">
+    <header class="hosts-top">
+      <span class="brand"><img src="/icon.svg" alt="" width="22" height="22">ChoiTerm</span>
+      <button class="round" id="hostsRefresh" type="button" aria-label="새로 고침" data-icon="refresh-cw" data-size="18"></button>
+    </header>
+    <div class="hosts-body" id="hostsBody"></div>
+  </section>
+
+  <div class="app" id="app">
+    <!-- The sidebar on the PC; on a phone, one desktop's workspace list. -->
+    <aside class="side" id="side" aria-label="작업 공간">
+      <div class="side-top pc-only">
+        <button class="pc-button" id="pcButton" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="PC 고르기">
+          <span class="pc-mark" data-icon="monitor" data-size="14"></span>
+          <span class="pc-name" id="pcName">ChoiTerm</span>
+          <span class="dot" id="dot" title="연결 상태"></span>
+          <span class="chev" data-icon="chevrons-up-down" data-size="14"></span>
+        </button>
+        <span class="grow"></span>
+        <button class="icon" id="sideClose" type="button" aria-label="사이드바 접기" data-icon="panel-left" data-size="16"></button>
+      </div>
+
+      <!-- Phone: back to the desktops, this desktop's name, then the list's tools. -->
+      <div class="host-chrome phone-only" id="hostChrome">
+        <div class="host-bar">
+          <button class="round" id="toHosts" type="button" aria-label="데스크톱 목록으로" data-icon="chevron-left" data-size="22"></button>
+          <div class="host-id">
+            <div class="host-line"><span class="dot" id="hostDot"></span><strong id="hostName">ChoiTerm</strong></div>
+            <span class="host-sub" id="hostSub">Windows</span>
+          </div>
+        </div>
+        <div class="host-tools">
+          <button class="filter-chip" id="phoneOptions" type="button"><span data-icon="sliders-horizontal" data-size="13"></span>작업 공간 옵션<span class="chip-badge" id="optionsBadge" hidden></span></button>
+          <span class="grow"></span>
+          <button class="tool" id="phoneTasks" type="button" aria-label="작업" data-icon="list" data-size="16"></button>
+          <button class="tool" id="phoneGallery" type="button" aria-label="갤러리" data-icon="images" data-size="16"></button>
+          <button class="tool" id="phoneSearch" type="button" aria-label="작업 공간 찾기" data-icon="search" data-size="16"></button>
+        </div>
+      </div>
+
+      <nav class="side-nav pc-only">
+        <button type="button" id="navHome"><span data-icon="house" data-size="16" data-stroke="1.75"></span>홈</button>
+        <button type="button" id="navSearch" class="nav-search"><span data-icon="search" data-size="16" data-stroke="1.75"></span>검색<kbd>Ctrl J</kbd></button>
+        <button type="button" id="navTasks"><span data-icon="list" data-size="16" data-stroke="1.75"></span>작업</button>
+        <button type="button" id="openGallery"><span data-icon="images" data-size="16" data-stroke="1.75"></span>갤러리</button>
+        <button type="button" id="openNotes"><span data-icon="sticky-note" data-size="16" data-stroke="1.75"></span>메모</button>
+      </nav>
+      <div class="projects-head pc-only">
+        <span class="projects-title">프로젝트</span>
+        <span class="grow"></span>
+        <button class="icon-xs" id="listOptions" type="button" aria-label="작업 공간 옵션" title="작업 공간 옵션" data-icon="sliders-horizontal" data-size="14" data-stroke="2.25"></button>
+        <button class="icon-xs" id="addProject" type="button" aria-label="프로젝트 추가" title="프로젝트 추가" data-icon="folder-plus" data-size="14" data-stroke="2.25"></button>
+        <button class="icon-xs" id="newWorktree" type="button" aria-label="새 작업 공간" title="새 작업 공간 (Ctrl N)" data-icon="plus" data-size="14" data-stroke="2.25"></button>
+      </div>
+      <div class="side-filter" id="sideFilterRow" hidden>
+        <span data-icon="search" data-size="15"></span>
+        <input id="sideFilter" type="search" placeholder="작업 공간 찾기…" autocomplete="off">
+      </div>
+      <div class="list" id="list"></div>
+      <div class="drawer-foot" id="foot" hidden>
+        <button class="soft" id="archivePicked" disabled>0개 보관</button>
+        <button class="danger" id="kill" disabled>0개 종료</button>
+      </div>
+      <div class="side-toolbar pc-only">
+        <button class="icon-xs" id="pick" type="button" aria-label="여러 개 선택" title="여러 개 선택" data-icon="list-checks" data-size="14"></button>
+        <span class="grow"></span>
+        <button class="icon-xs" id="locate" type="button" aria-label="지금 세션으로" title="지금 세션으로" data-icon="crosshair" data-size="14"></button>
+      </div>
+      <button class="fab phone-only" id="fab" type="button" aria-label="새 작업 공간" data-icon="plus" data-size="24" data-stroke="2.75"></button>
+    </aside>
+
+    <main class="main" id="main">
+      <header class="bar">
+        <button class="round phone-only" id="backHome" type="button" aria-label="작업 공간 목록으로" data-icon="chevron-left" data-size="22"></button>
+        <button class="icon pc-only" id="sideOpen" type="button" aria-label="사이드바 열기" hidden data-icon="panel-left" data-size="16"></button>
+        <div class="title-block phone-only">
+          <strong id="headTitle">ChoiTerm</strong>
+          <span class="head-meta"><span class="dot" id="headDot"></span><span id="headSub"></span></span>
+        </div>
+        <nav class="tabs" id="tabs" role="tablist"></nav>
+        <div class="add">
+          <button class="new-tab" id="add" aria-label="새 탭" aria-expanded="false" data-icon="plus" data-size="14"></button>
+        </div>
+        <span class="grow pc-only"></span>
+        <button class="icon pc-only" id="searchButton" type="button" aria-label="터미널에서 찾기" title="터미널에서 찾기" data-icon="search" data-size="15"></button>
+        <button class="icon pc-only" id="splitButton" type="button" aria-label="화면 나누기" title="화면 나누기" aria-pressed="false" data-icon="square-split-horizontal" data-size="15"></button>
+        <button class="icon" id="filesButton" type="button" aria-label="파일" title="파일" aria-pressed="false" data-icon="folder" data-size="16"></button>
+        <button class="icon" id="imagesButton" type="button" aria-label="이 세션의 이미지" title="이 세션의 이미지" aria-pressed="false" data-icon="images" data-size="16"></button>
+        <button class="icon phone-only" id="changesButton" type="button" aria-label="변경" data-icon="git-branch" data-size="18"></button>
+        <button class="icon phone-only" id="moreButton" type="button" aria-label="더 보기" data-icon="ellipsis" data-size="18"></button>
+      </header>
+
+      <div class="webbar" id="webbar" hidden></div>
+      <button class="statusbar phone-only" id="statusbar" type="button" hidden aria-label="상태와 모델"></button>
+
+      <form class="search" id="search" hidden>
+        <input id="searchText" type="search" placeholder="터미널에서 찾기" autocomplete="off" enterkeyhint="search">
+        <span class="search-count" id="searchCount"></span>
+        <button type="button" id="searchPrev" aria-label="이전" data-icon="arrow-up" data-size="16"></button>
+        <button type="submit" id="searchNext" aria-label="다음" data-icon="arrow-down" data-size="16"></button>
+        <button type="button" id="searchClose" aria-label="찾기 닫기" data-icon="x" data-size="16"></button>
+      </form>
+
+      <section class="home-pane pc-only" id="homePane" hidden aria-label="홈"><div class="home-inner" id="homeBody"></div></section>
+
+      <div class="panes" id="panes">
+        <section class="pane" id="mainPane">
+          <main class="stage" id="stage">
+            <div class="screen" id="screen"></div>
+            <div class="links" id="links"></div>
+            <div class="sel-handle start" id="selStart" hidden></div>
+            <div class="sel-handle end" id="selEnd" hidden></div>
+            <div class="shots" id="shots" hidden></div>
+            <button class="to-bottom" id="toBottom" type="button" aria-label="맨 아래로" hidden data-icon="arrow-down-to-line" data-size="20"></button>
+            <div class="empty" id="empty" hidden>
+              <p id="emptyText">열린 세션이 없어요</p>
+              <button class="ghost" id="showList" hidden>세션 목록 보기</button>
+              <div class="agent-grid" id="emptyAgents"></div>
+            </div>
+          </main>
+          <div class="doc" id="doc" hidden></div>
+        </section>
+        <div class="split-handle" id="splitHandle" hidden></div>
+        <section class="pane second" id="secondPane" hidden>
+          <div class="second-bar" id="secondBar"></div>
+          <div class="second-body" id="secondBody"></div>
+        </section>
+      </div>
+
+      <footer class="dock" id="dock">
+        <div class="keys" id="keys"></div>
+        <form class="compose" id="compose">
+          <button class="attach" type="button" id="attach" aria-label="파일 보내기" data-icon="paperclip" data-size="19"></button>
+          <input type="file" id="files" multiple hidden>
+          <textarea id="text" rows="1" placeholder="입력하면 터미널에 바로 써져요" autocomplete="off" enterkeyhint="enter"></textarea>
+          <button class="send" type="submit" aria-label="보내기" data-icon="arrow-up" data-size="19" data-stroke="2.4"></button>
+        </form>
+      </footer>
+    </main>
+
+    <!-- The open session's project: files, search, git changes, GitHub tasks. -->
+    <aside class="files" id="filesPanel" hidden aria-label="프로젝트">
+      <div class="files-head">
+        <nav class="panel-tabs" id="panelTabs" role="tablist">
+          <button type="button" class="icon" data-panel="files" aria-label="파일" title="파일"></button>
+          <button type="button" class="icon" data-panel="search" aria-label="검색" title="검색"></button>
+          <button type="button" class="icon" data-panel="changes" aria-label="변경" title="변경"></button>
+          <button type="button" class="icon" data-panel="tasks" aria-label="작업" title="GitHub 작업"></button>
+          <button type="button" class="icon" data-panel="images" aria-label="이미지" title="이 세션의 이미지"></button>
+        </nav>
+        <span class="grow"></span>
+        <button class="icon" id="filesUp" type="button" aria-label="상위 폴더" data-icon="arrow-up" data-size="15"></button>
+        <button class="icon" id="filesRefresh" type="button" aria-label="새로 고침" data-icon="refresh-cw" data-size="14"></button>
+        <button class="icon" id="filesClose" type="button" aria-label="닫기" data-icon="x" data-size="15"></button>
+      </div>
+      <div class="panel-title"><strong id="filesTitle">파일</strong><span class="mono-path" id="filesPath"></span></div>
+      <div class="panel-view files-view" id="filesView">
+        <label class="tree-find"><span data-icon="search" data-size="14"></span><input id="treeFind" type="search" placeholder="파일 이름·내용 찾기" autocomplete="off" enterkeyhint="search"></label>
+        <div class="tree" id="tree"></div>
+        <div class="results" id="treeResults" hidden></div>
+      </div>
+      <div class="panel-view" id="searchView" hidden>
+        <form class="panel-search" id="panelSearch"><input id="panelQuery" type="search" placeholder="프로젝트에서 찾기" autocomplete="off" enterkeyhint="search"></form>
+        <div class="results" id="searchResults"></div>
+      </div>
+      <div class="panel-view" id="changesView" hidden></div>
+      <div class="panel-view" id="tasksView" hidden></div>
+      <div class="panel-view" id="imagesView" hidden></div>
+    </aside>
+  </div>
+
+  <!-- The PC's bottom line (status bar): usage per account, the open session, this PC. -->
+  <footer class="status pc-only" id="statusFooter"></footer>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <div class="pc-menu" id="pcMenu" hidden>
+    <strong class="pc-menu-title">실행할 PC</strong>
+    <input class="pc-filter" id="pcFilter" type="search" placeholder="PC 찾기" autocomplete="off" hidden>
+    <div class="pc-list" id="pcList" role="listbox" aria-label="PC"></div>
+  </div>
+
+  <div class="ctx-menu" id="contextMenu" role="menu" hidden></div>
+
+  <!-- The + menu (agents, another folder, a workspace): at the page's top level, so it shows over the
+       phone's list screen as well as over a session. -->
+  <div class="menu" id="menu" hidden></div>
+
+  <div class="copybar" id="copybar" hidden>
+    <button type="button" id="copyNow">복사</button>
+    <button type="button" id="copySend">보내기</button>
+    <button type="button" id="copyParagraph">문단</button>
+    <button type="button" id="copyScreen">화면</button>
+    <button type="button" id="copyCancel" class="copy-cancel" aria-label="복사 그만두기" data-icon="x" data-size="16"></button>
+  </div>
+
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-panel" role="dialog" aria-label="키 줄 편집">
+      <div class="sheet-handle phone-only"></div>
+      <div class="sheet-head">
+        <strong id="sheetTitle">키 줄 편집</strong>
+        <button class="text-button" id="sheetClose" type="button">완료</button>
+      </div>
+      <div class="sheet-body" id="sheetBody"></div>
+    </div>
+  </div>
+
+  <div class="viewer" id="viewer" hidden>
+    <div class="viewer-track" id="viewerTrack">
+      <div class="slide"><img alt="" draggable="false"></div>
+      <div class="slide"><img alt="" draggable="false"></div>
+      <div class="slide"><img alt="" draggable="false"></div>
+    </div>
+    <div class="viewer-info">
+      <div class="viewer-meta"><span id="viewerCount"></span><span id="viewerPath"></span></div>
+      <div class="viewer-tags" id="viewerTags"></div>
+    </div>
+    <button class="viewer-nav prev" id="viewerPrev" type="button" aria-label="이전 이미지" data-icon="chevron-left" data-size="22"></button>
+    <button class="viewer-nav next" id="viewerNext" type="button" aria-label="다음 이미지" data-icon="chevron-right" data-size="22"></button>
+    <button class="viewer-close" id="viewerClose" type="button" aria-label="닫기" data-icon="x" data-size="16"></button>
+  </div>
+
+  <section class="gallery" id="galleryPanel" hidden aria-label="갤러리">
+    <div class="gallery-head">
+      <button class="round" id="galleryBack" type="button" aria-label="갤러리 닫기" data-icon="chevron-left" data-size="20"></button>
+      <strong>갤러리</strong>
+      <span class="gallery-count" id="galleryCount"></span>
+      <button class="text-button" id="galleryAll" type="button">모두</button>
+      <button class="text-button" id="galleryPick" type="button">선택</button>
+    </div>
+    <div class="chips gallery-filters" id="galleryFilters"></div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+    <div class="gallery-foot" id="galleryFoot" hidden>
+      <p>내가 보낸 파일은 PC에서도 지워지고, 받은 이미지는 목록에서만 빠져요</p>
+      <button class="danger" id="galleryDelete" type="button" disabled>0개 삭제</button>
+    </div>
+  </section>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
