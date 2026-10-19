@@ -248,7 +248,7 @@ const files = loadStaticFiles({
 })
 
 // Read on each request, so a newly built APK or installer is served without a restart.
-function newest(folder: string, pattern: RegExp): Download | undefined {
+function newestName(folder: string, pattern: RegExp): string | undefined {
   try {
     const names: string[] = []
 
@@ -258,15 +258,27 @@ function newest(folder: string, pattern: RegExp): Download | undefined {
 
     names.sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 
-    const name = names.at(-1)
+    return names.at(-1)
+  } catch {
+    return undefined
+  }
+}
 
+function newest(folder: string, pattern: RegExp): Download | undefined {
+  const name = newestName(folder, pattern)
+
+  try {
     return name === undefined ? undefined : { name, body: readFileSync(join(folder, name)) }
   } catch {
     return undefined
   }
 }
 
-const latestApk = (): Download | undefined => newest(join(here, 'android', 'dist'), /^ChoiTerm-[\d.]+\.apk$/)
+const APK_FOLDER = join(here, 'android', 'dist')
+const APK_NAME = /^ChoiTerm-([\d.]+)\.apk$/
+const latestApk = (): Download | undefined => newest(APK_FOLDER, APK_NAME)
+// The phone app's version this PC hands out, from the APK's file name.
+const latestApkVersion = (): string | null => newestName(APK_FOLDER, APK_NAME)?.match(APK_NAME)?.[1] ?? null
 const latestInstaller = (): Download | undefined => newest(join(here, 'desktop', 'dist'), /^ChoiTerm_[\d.]+_x64-setup\.exe$/)
 
 let announce: (message: ServerMessage) => void = () => {}
@@ -358,6 +370,7 @@ const notices = createNotices()
 const drafts = createDrafts(dataFile('drafts'))
 const running = startServer(settings, sessions, files, log, {
   latestApk,
+  latestApkVersion,
   latestInstaller,
   uploadFolder,
   notices,

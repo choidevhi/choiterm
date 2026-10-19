@@ -3909,7 +3909,7 @@ function oldApp() {
   return window.ChoiTermApp !== undefined && typeof window.ChoiTermApp.version !== 'function'
 }
 
-function showAppUpdate(reason) {
+function showAppUpdate(reason, onClose = () => {}) {
   if (document.getElementById('appUpdate') !== null) return
 
   const bar = document.createElement('div')
@@ -3927,12 +3927,44 @@ function showAppUpdate(reason) {
   close.className = 'icon'
   close.innerHTML = UI.close
   close.setAttribute('aria-label', '닫기')
-  close.addEventListener('click', () => bar.remove())
+  close.addEventListener('click', () => {
+    bar.remove()
+    onClose()
+  })
   bar.append(words, get, close)
   document.body.append(bar)
 }
 
 if (oldApp()) showAppUpdate('새 앱이 있어요 (0.8.0) · 다른 PC 오가기와 새 화면이 앱 안에서 돼요')
+
+// 0.10.0 is newer than 0.9.2: compared part by part as numbers.
+function newerVersion(candidate, installed) {
+  const a = candidate.split('.').map(Number)
+  const b = installed.split('.').map(Number)
+
+  for (let at = 0; at < Math.max(a.length, b.length); at += 1) {
+    const difference = (a[at] ?? 0) - (b[at] ?? 0)
+
+    if (difference !== 0) return difference > 0
+  }
+
+  return false
+}
+
+// In the phone app: when this PC hands out a newer APK than the one installed, the bar above offers
+// it. Closing the bar puts that version away; the next one shows again.
+const APP_SKIPPED_KEY = 'choiterm.app-update-skipped'
+
+async function checkAppVersion() {
+  if (typeof window.ChoiTermApp?.version !== 'function') return
+
+  const reply = await fetch('/app-version', { cache: 'no-store' }).then((response) => response.json()).catch(() => null)
+  const latest = typeof reply?.version === 'string' ? reply.version : null
+
+  if (latest === null || latest === load(APP_SKIPPED_KEY) || !newerVersion(latest, window.ChoiTermApp.version())) return
+
+  showAppUpdate(`새 앱 ${latest}이 있어요. 받은 뒤 설치를 눌러 주세요`, () => save(APP_SKIPPED_KEY, latest))
+}
 
 function closePcMenu() {
   pcMenu.hidden = true
@@ -7886,7 +7918,10 @@ document.addEventListener('visibilitychange', () => {
   claim()
   setTimeout(claim, SETTLE_MS)
   void checkForUpdate()
+  void checkAppVersion()
 })
+
+void checkAppVersion()
 
 // The first screen, once everything it draws from exists. Another PC's composer sent here (#create)
 // opens this PC's.

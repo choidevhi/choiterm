@@ -236,6 +236,7 @@ export interface Download {
 }
 
 export const APK_PATH = '/ChoiTerm.apk'
+export const APP_VERSION_PATH = '/app-version'
 export const INSTALLER_PATH = '/ChoiTerm-setup.exe'
 
 function serveDownload(res: ServerResponse, download: Download | undefined, type: string): void {
@@ -302,6 +303,7 @@ type JsonBody =
   | GithubState
   | { repos: GithubRepo[] | null }
   | { signIn: SignIn | null }
+  | { version: string | null }
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -350,6 +352,8 @@ async function receiveUpload(
 
 export interface Extras {
   latestApk?: () => Download | undefined
+  // The version of that APK, so the phone app can tell it is behind.
+  latestApkVersion?: () => string | null
   latestInstaller?: () => Download | undefined
   uploadFolder?: string
   notices?: Notices
@@ -897,6 +901,12 @@ export function startServer(
 
     if (req.method === 'GET' && req.url === APK_PATH) {
       serveDownload(res, extras.latestApk?.(), 'application/vnd.android.package-archive')
+
+      return
+    }
+
+    if (req.method === 'GET' && path === APP_VERSION_PATH) {
+      sendJson(res, 200, { version: extras.latestApkVersion?.() ?? null })
 
       return
     }
