@@ -356,10 +356,18 @@ function input(data) {
   sendInput(data)
 }
 
+// The terminal's room in cells, or undefined while it is hidden (the PC's home screen), where fit
+// measures no columns at all.
+function termRoom() {
+  const room = fit.proposeDimensions()
+
+  return room !== undefined && Number.isFinite(room.cols) && Number.isFinite(room.rows) && room.cols > 1 && room.rows > 1 ? room : undefined
+}
+
 // One terminal has one size. Whoever is using it (typing, focused, just opened it) sets it; the
 // other screens show the same grid, shrunk to fit when it is bigger than they are.
 function claim() {
-  const wanted = fit.proposeDimensions()
+  const wanted = termRoom()
 
   if (current === null || wanted === undefined) return
 
@@ -376,7 +384,7 @@ function applySize(cols, rows) {
     term.resize(cols, rows)
   }
 
-  const room = fit.proposeDimensions()
+  const room = termRoom()
 
   if (room === undefined) return
 
@@ -727,7 +735,7 @@ function currentFolder() {
 }
 
 function openSession(kind, cwd = currentFolder()) {
-  const size = fit.proposeDimensions() ?? { cols: 100, rows: 30 }
+  const size = termRoom() ?? { cols: 100, rows: 30 }
 
   closeAddMenu()
   closeDrawer()
@@ -757,7 +765,6 @@ function shortFolder(path) {
   return parts.length <= 2 ? path : `…\\${parts.slice(-2).join('\\')}`
 }
 
-// The + menu: an agent for a new tab in this checkout, another folder, or a new worktree.
 // The + menu: an agent for a new tab in this checkout.
 function agentButton(agent, onPick) {
   const button = document.createElement('button')
@@ -4229,7 +4236,7 @@ function repoColour(name) {
   return REPO_COLOURS[Math.abs(hash) % REPO_COLOURS.length]
 }
 
-function openTree(tree, anchor) {
+function openTree(tree) {
   const session = latestSession(tree)
 
   if (session !== undefined) {
@@ -4239,8 +4246,9 @@ function openTree(tree, anchor) {
     return
   }
 
-  // An empty workspace: start an agent in it.
-  openAddMenuAt(anchor, tree.path)
+  // An empty workspace opens with a terminal in it, like a never-visited one in the reference
+  // design; agents start from the + menu or by typing their command there.
+  openSession('shell', tree.path)
 }
 
 // A workspace's state: an amber bell for something new, a turning ring while
@@ -4395,14 +4403,9 @@ function worktreeRow(tree) {
 
   row.append(treeStatus(tree), body)
   card.append(row)
-  card.addEventListener('click', (event) => {
-    // An empty workspace opens the agent menu, which this click would close again on the document.
-    if (latestSession(tree) === undefined) event.stopPropagation()
-
-    openTree(tree, card)
-  })
+  card.addEventListener('click', () => openTree(tree))
   card.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && event.target === card) openTree(tree, card)
+    if (event.key === 'Enter' && event.target === card) openTree(tree)
   })
   onLongPress(card, (at) => openTreeMenu(tree, at))
 
@@ -6928,7 +6931,7 @@ function openCreate(projectPath = null) {
       return
     }
 
-    const size = fit.proposeDimensions() ?? { cols: 100, rows: 30 }
+    const size = termRoom() ?? { cols: 100, rows: 30 }
 
     if (!isGit()) {
       send({ t: 'new', kind: agent, cols: size.cols, rows: size.rows, cwd: project.project })
@@ -7213,7 +7216,7 @@ async function fillPalette() {
       const icon = document.createElement('span')
 
       icon.innerHTML = BRANCH_ICON
-      rows.push(paletteRow(icon, treeTitle(tree), `${tree.project.name} · ${tree.branch}`, () => openTree(tree, document.body)))
+      rows.push(paletteRow(icon, treeTitle(tree), `${tree.project.name} · ${tree.branch}`, () => openTree(tree)))
     }
   }
 
