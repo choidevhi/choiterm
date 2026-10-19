@@ -4395,7 +4395,12 @@ function worktreeRow(tree) {
 
   row.append(treeStatus(tree), body)
   card.append(row)
-  card.addEventListener('click', () => openTree(tree, card))
+  card.addEventListener('click', (event) => {
+    // An empty workspace opens the agent menu, which this click would close again on the document.
+    if (latestSession(tree) === undefined) event.stopPropagation()
+
+    openTree(tree, card)
+  })
   card.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && event.target === card) openTree(tree, card)
   })
